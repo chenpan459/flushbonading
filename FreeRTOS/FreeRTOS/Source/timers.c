@@ -26,12 +26,17 @@
  *
  */
 
+/*
+ * FreeRTOS 软件定时器实现（timers.c）：
+ * 由定时器守护任务（daemon）通过命令队列 xTimerQueue 串行处理启动/停止/复位/改周期等；
+ * 活动定时器按到期时间排序存放在双缓冲链表（应对 tick 溢出），到期在守护任务上下文中调用回调。
+ * 公开 API 与宏多在 timers.h；本文件为内核实现。
+ */
+
 /* Standard includes. */
 #include <stdlib.h>
 
-/* Defining MPU_WRAPPERS_INCLUDED_FROM_API_FILE prevents task.h from redefining
- * all the API functions to use the MPU wrappers.  That should only be done when
- * task.h is included from an application file. */
+/* 本文件为内核实现：定义后再包含 task.h，避免 API 被展开为 MPU 用户态包装。 */
 #define MPU_WRAPPERS_INCLUDED_FROM_API_FILE
 
 #include "FreeRTOS.h"
@@ -43,189 +48,131 @@
     #error configUSE_TIMERS must be set to 1 to make the xTimerPendFunctionCall() function available.
 #endif
 
-/* The MPU ports require MPU_WRAPPERS_INCLUDED_FROM_API_FILE to be defined
- * for the header files above, but not in this file, in order to generate the
- * correct privileged Vs unprivileged linkage and placement. */
+/* 头文件包含结束后取消宏，保证本文件符号以特权实现链接（MPU 端口）。 */
 #undef MPU_WRAPPERS_INCLUDED_FROM_API_FILE
 
 
-/* This entire source file will be skipped if the application is not configured
- * to include software timer functionality.  This #if is closed at the very bottom
- * of this file.  If you want to include software timer functionality then ensure
- * configUSE_TIMERS is set to 1 in FreeRTOSConfig.h. */
+/* 若 FreeRTOSConfig.h 中 configUSE_TIMERS 为 0，则本文件整段由预处理器跳过（至文件末尾 #endif）。 */
 #if ( configUSE_TIMERS == 1 )
 
-/* Misc definitions. */
+/* 杂项常量。 */
     #define tmrNO_DELAY                    ( ( TickType_t ) 0U )
     #define tmrMAX_TIME_BEFORE_OVERFLOW    ( ( TickType_t ) -1 )
 
-/* The name assigned to the timer service task. This can be overridden by
- * defining configTIMER_SERVICE_TASK_NAME in FreeRTOSConfig.h. */
     #ifndef configTIMER_SERVICE_TASK_NAME
         #define configTIMER_SERVICE_TASK_NAME    "Tmr Svc"
     #endif
 
     #if ( ( configNUMBER_OF_CORES > 1 ) && ( configUSE_CORE_AFFINITY == 1 ) )
 
-/* The core affinity assigned to the timer service task on SMP systems.
- * This can be overridden by defining configTIMER_SERVICE_TASK_CORE_AFFINITY in FreeRTOSConfig.h. */
         #ifndef configTIMER_SERVICE_TASK_CORE_AFFINITY
             #define configTIMER_SERVICE_TASK_CORE_AFFINITY    tskNO_AFFINITY
         #endif
     #endif /* #if ( ( configNUMBER_OF_CORES > 1 ) && ( configUSE_CORE_AFFINITY == 1 ) ) */
 
-/* Bit definitions used in the ucStatus member of a timer structure. */
+/* Timer_t.ucStatus 状态位。 */
     #define tmrSTATUS_IS_ACTIVE                  ( 0x01U )
     #define tmrSTATUS_IS_STATICALLY_ALLOCATED    ( 0x02U )
     #define tmrSTATUS_IS_AUTORELOAD              ( 0x04U )
 
-/* The definition of the timers themselves. */
+/* 软件定时器本体；结构体名保留 tmrTimerControl 以兼容内核感知调试器。 */
     typedef struct tmrTimerControl                                               /* The old naming convention is used to prevent breaking kernel aware debuggers. */
     {
-        const char * pcTimerName;                                                /**< Text name.  This is not used by the kernel, it is included simply to make debugging easier. */
-        ListItem_t xTimerListItem;                                               /**< Standard linked list item as used by all kernel features for event management. */
-        TickType_t xTimerPeriodInTicks;                                          /**< How quickly and often the timer expires. */
-        void * pvTimerID;                                                        /**< An ID to identify the timer.  This allows the timer to be identified when the same callback is used for multiple timers. */
-        portTIMER_CALLBACK_ATTRIBUTE TimerCallbackFunction_t pxCallbackFunction; /**< The function that will be called when the timer expires. */
+        const char * pcTimerName;                                                /**< 调试用名称。 */
+        ListItem_t xTimerListItem;                                               /**< 挂入活动定时器链表。 */
+        TickType_t xTimerPeriodInTicks;                                          /**< 周期（tick）。 */
+        void * pvTimerID;                                                        /**< 用户自定义 ID（同回调多定时器时区分）。 */
+        portTIMER_CALLBACK_ATTRIBUTE TimerCallbackFunction_t pxCallbackFunction; /**< 到期回调。 */
         #if ( configUSE_TRACE_FACILITY == 1 )
-            UBaseType_t uxTimerNumber;                                           /**< An ID assigned by trace tools such as FreeRTOS+Trace */
+            UBaseType_t uxTimerNumber;                                           /**< 跟踪工具用编号。 */
         #endif
-        uint8_t ucStatus;                                                        /**< Holds bits to say if the timer was statically allocated or not, and if it is active or not. */
+        uint8_t ucStatus;                                                        /**< 活动/静态分配/自动重载等位标志。 */
     } xTIMER;
 
-/* The old xTIMER name is maintained above then typedefed to the new Timer_t
- * name below to enable the use of older kernel aware debuggers. */
+/* 对外类型名 Timer_t。 */
     typedef xTIMER Timer_t;
 
-/* The definition of messages that can be sent and received on the timer queue.
- * Two types of message can be queued - messages that manipulate a software timer,
- * and messages that request the execution of a non-timer related callback.  The
- * two message types are defined in two separate structures, xTimerParametersType
- * and xCallbackParametersType respectively. */
+/*
+ * 守护任务消息：xMessageID 区分「定时器命令」与「延迟执行普通回调」（后者需 INCLUDE_xTimerPendFunctionCall）。
+ */
     typedef struct tmrTimerParameters
     {
-        TickType_t xMessageValue; /**< An optional value used by a subset of commands, for example, when changing the period of a timer. */
-        Timer_t * pxTimer;        /**< The timer to which the command will be applied. */
+        TickType_t xMessageValue; /**< 命令附加参数（如改周期的新周期值）。 */
+        Timer_t * pxTimer;        /**< 目标定时器。 */
     } TimerParameter_t;
 
 
     typedef struct tmrCallbackParameters
     {
         portTIMER_CALLBACK_ATTRIBUTE
-        PendedFunction_t pxCallbackFunction; /* << The callback function to execute. */
-        void * pvParameter1;                 /* << The value that will be used as the callback functions first parameter. */
-        uint32_t ulParameter2;               /* << The value that will be used as the callback functions second parameter. */
+        PendedFunction_t pxCallbackFunction; /* 待执行的延迟函数。 */
+        void * pvParameter1;                 /* 回调第一参数。 */
+        uint32_t ulParameter2;               /* 回调第二参数。 */
     } CallbackParameters_t;
 
-/* The structure that contains the two message types, along with an identifier
- * that is used to determine which message type is valid. */
     typedef struct tmrTimerQueueMessage
     {
-        BaseType_t xMessageID; /**< The command being sent to the timer service task. */
+        BaseType_t xMessageID; /**< 发往守护任务的命令 ID（或负值表示延迟回调）。 */
         union
         {
             TimerParameter_t xTimerParameters;
 
-            /* Don't include xCallbackParameters if it is not going to be used as
-             * it makes the structure (and therefore the timer queue) larger. */
             #if ( INCLUDE_xTimerPendFunctionCall == 1 )
                 CallbackParameters_t xCallbackParameters;
             #endif /* INCLUDE_xTimerPendFunctionCall */
         } u;
     } DaemonTaskMessage_t;
 
-/* The list in which active timers are stored.  Timers are referenced in expire
- * time order, with the nearest expiry time at the front of the list.  Only the
- * timer service task is allowed to access these lists.
- * xActiveTimerList1 and xActiveTimerList2 could be at function scope but that
- * breaks some kernel aware debuggers, and debuggers that reply on removing the
- * static qualifier. */
+/* 活动定时器双表 + 当前/溢出侧指针；仅守护任务可安全访问。置于文件作用域以兼容调试器。 */
     PRIVILEGED_DATA static List_t xActiveTimerList1;
     PRIVILEGED_DATA static List_t xActiveTimerList2;
     PRIVILEGED_DATA static List_t * pxCurrentTimerList;
     PRIVILEGED_DATA static List_t * pxOverflowTimerList;
 
-/* A queue that is used to send commands to the timer service task. */
+/* 各任务向定时器守护任务投递命令/回调请求的队列。 */
     PRIVILEGED_DATA static QueueHandle_t xTimerQueue = NULL;
     PRIVILEGED_DATA static TaskHandle_t xTimerTaskHandle = NULL;
 
 /*-----------------------------------------------------------*/
 
-/*
- * Initialise the infrastructure used by the timer service task if it has not
- * been initialised already.
- */
+    /* 首次使用前初始化活动链表与 xTimerQueue。 */
     static void prvCheckForValidListAndQueue( void ) PRIVILEGED_FUNCTION;
 
-/*
- * The timer service task (daemon).  Timer functionality is controlled by this
- * task.  Other tasks communicate with the timer service task using the
- * xTimerQueue queue.
- */
+    /* 定时器守护任务：主循环内处理到期与命令队列。 */
     static portTASK_FUNCTION_PROTO( prvTimerTask, pvParameters ) PRIVILEGED_FUNCTION;
 
-/*
- * Called by the timer service task to interpret and process a command it
- * received on the timer queue.
- */
+    /* 从 xTimerQueue 取出并执行一条或多条命令。 */
     static void prvProcessReceivedCommands( void ) PRIVILEGED_FUNCTION;
 
-/*
- * Insert the timer into either xActiveTimerList1, or xActiveTimerList2,
- * depending on if the expire time causes a timer counter overflow.
- */
+    /* 将定时器按 xNextExpiryTime 插入当前侧或溢出侧活动链表；若已过期则返回 pdTRUE。 */
     static BaseType_t prvInsertTimerInActiveList( Timer_t * const pxTimer,
                                                   const TickType_t xNextExpiryTime,
                                                   const TickType_t xTimeNow,
                                                   const TickType_t xCommandTime ) PRIVILEGED_FUNCTION;
 
-/*
- * Reload the specified auto-reload timer.  If the reloading is backlogged,
- * clear the backlog, calling the callback for each additional reload.  When
- * this function returns, the next expiry time is after xTimeNow.
- */
+    /* 自动重载定时器：补齐积压周期并多次回调，直至下次到期晚于 xTimeNow。 */
     static void prvReloadTimer( Timer_t * const pxTimer,
                                 TickType_t xExpiredTime,
                                 const TickType_t xTimeNow ) PRIVILEGED_FUNCTION;
 
-/*
- * An active timer has reached its expire time.  Reload the timer if it is an
- * auto-reload timer, then call its callback.
- */
+    /* 链表头定时器到期：自动重载则重新入表，最后调用回调。 */
     static void prvProcessExpiredTimer( const TickType_t xNextExpireTime,
                                         const TickType_t xTimeNow ) PRIVILEGED_FUNCTION;
 
-/*
- * The tick count has overflowed.  Switch the timer lists after ensuring the
- * current timer list does not still reference some timers.
- */
+    /* tick 溢出：先处理当前表上仍挂着的到期项，再交换当前/溢出链表指针。 */
     static void prvSwitchTimerLists( void ) PRIVILEGED_FUNCTION;
 
-/*
- * Obtain the current tick count, setting *pxTimerListsWereSwitched to pdTRUE
- * if a tick count overflow occurred since prvSampleTimeNow() was last called.
- */
+    /* 读取当前 tick；若相对上次采样发生回绕则切换定时器表并置 *pxTimerListsWereSwitched。 */
     static TickType_t prvSampleTimeNow( BaseType_t * const pxTimerListsWereSwitched ) PRIVILEGED_FUNCTION;
 
-/*
- * If the timer list contains any active timers then return the expire time of
- * the timer that will expire first and set *pxListWasEmpty to false.  If the
- * timer list does not contain any timers then return 0 and set *pxListWasEmpty
- * to pdTRUE.
- */
+    /* 返回当前活动表上最近到期时间；空表则返回 0 并使 *pxListWasEmpty 为 pdTRUE。 */
     static TickType_t prvGetNextExpireTime( BaseType_t * const pxListWasEmpty ) PRIVILEGED_FUNCTION;
 
-/*
- * If a timer has expired, process it.  Otherwise, block the timer service task
- * until either a timer does expire or a command is received.
- */
+    /* 已到期则处理回调；否则按下一到期或队列消息阻塞守护任务。 */
     static void prvProcessTimerOrBlockTask( const TickType_t xNextExpireTime,
                                             BaseType_t xListWasEmpty ) PRIVILEGED_FUNCTION;
 
-/*
- * Called after a Timer_t structure has been allocated either statically or
- * dynamically to fill in the structure's members.
- */
+    /* Timer_t 内存就绪后填充字段（不启动定时器）。 */
     static void prvInitialiseNewTimer( const char * const pcTimerName,
                                        const TickType_t xTimerPeriodInTicks,
                                        const BaseType_t xAutoReload,
@@ -234,6 +181,9 @@
                                        Timer_t * pxNewTimer ) PRIVILEGED_FUNCTION;
 /*-----------------------------------------------------------*/
 
+    /*
+     * 由 vTaskStartScheduler 在 configUSE_TIMERS==1 时调用：确保队列/链表已建，再创建定时器守护任务。
+     */
     BaseType_t xTimerCreateTimerTask( void )
     {
         BaseType_t xReturn = pdFAIL;
@@ -333,6 +283,7 @@
 
     #if ( configSUPPORT_DYNAMIC_ALLOCATION == 1 )
 
+        /* 动态分配 Timer_t 并初始化；返回句柄或 NULL。 */
         TimerHandle_t xTimerCreate( const char * const pcTimerName,
                                     const TickType_t xTimerPeriodInTicks,
                                     const BaseType_t xAutoReload,
@@ -367,6 +318,7 @@
 
     #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
 
+        /* 使用调用方提供的 StaticTimer_t 内存创建定时器。 */
         TimerHandle_t xTimerCreateStatic( const char * const pcTimerName,
                                           const TickType_t xTimerPeriodInTicks,
                                           const BaseType_t xAutoReload,
@@ -414,6 +366,7 @@
     #endif /* configSUPPORT_STATIC_ALLOCATION */
 /*-----------------------------------------------------------*/
 
+    /* 填充成员、初始化链表项、设置自动重载位；周期须大于 0。 */
     static void prvInitialiseNewTimer( const char * const pcTimerName,
                                        const TickType_t xTimerPeriodInTicks,
                                        const BaseType_t xAutoReload,
@@ -445,6 +398,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 任务上下文向守护队列发送定时器命令（命令 ID 须小于 tmrFIRST_FROM_ISR_COMMAND）。 */
     BaseType_t xTimerGenericCommandFromTask( TimerHandle_t xTimer,
                                              const BaseType_t xCommandID,
                                              const TickType_t xOptionalValue,
@@ -494,6 +448,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* ISR 安全地向守护队列发送命令（ID >= tmrFIRST_FROM_ISR_COMMAND）。 */
     BaseType_t xTimerGenericCommandFromISR( TimerHandle_t xTimer,
                                             const BaseType_t xCommandID,
                                             const TickType_t xOptionalValue,
@@ -536,6 +491,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 返回定时器守护任务句柄；调度未启动时可能为 NULL（由 configASSERT 约束）。 */
     TaskHandle_t xTimerGetTimerDaemonTaskHandle( void )
     {
         traceENTER_xTimerGetTimerDaemonTaskHandle();
@@ -550,6 +506,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 返回定时器周期（tick）。 */
     TickType_t xTimerGetPeriod( TimerHandle_t xTimer )
     {
         Timer_t * pxTimer = xTimer;
@@ -564,6 +521,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 运行时切换单次/自动重载模式（改 ucStatus 位）。 */
     void vTimerSetReloadMode( TimerHandle_t xTimer,
                               const BaseType_t xAutoReload )
     {
@@ -589,6 +547,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 是否为自动重载定时器。 */
     BaseType_t xTimerGetReloadMode( TimerHandle_t xTimer )
     {
         Timer_t * pxTimer = xTimer;
@@ -617,6 +576,7 @@
         return xReturn;
     }
 
+    /* xTimerGetReloadMode 的 UBaseType_t 包装。 */
     UBaseType_t uxTimerGetReloadMode( TimerHandle_t xTimer )
     {
         UBaseType_t uxReturn;
@@ -631,6 +591,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 返回链表项中记录的下次到期 tick（活动表中有效）。 */
     TickType_t xTimerGetExpiryTime( TimerHandle_t xTimer )
     {
         Timer_t * pxTimer = xTimer;
@@ -648,6 +609,7 @@
 /*-----------------------------------------------------------*/
 
     #if ( configSUPPORT_STATIC_ALLOCATION == 1 )
+        /* 若为静态创建则写出 StaticTimer_t 指针。 */
         BaseType_t xTimerGetStaticBuffer( TimerHandle_t xTimer,
                                           StaticTimer_t ** ppxTimerBuffer )
         {
@@ -678,6 +640,7 @@
     #endif /* configSUPPORT_STATIC_ALLOCATION */
 /*-----------------------------------------------------------*/
 
+    /* 调试用定时器名字符串。 */
     const char * pcTimerGetName( TimerHandle_t xTimer )
     {
         Timer_t * pxTimer = xTimer;
@@ -692,6 +655,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 自动重载：循环插入并回调直到下次到期落在未来。 */
     static void prvReloadTimer( Timer_t * const pxTimer,
                                 TickType_t xExpiredTime,
                                 const TickType_t xTimeNow )
@@ -711,6 +675,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 处理当前活动表表头已到期定时器：去链、自动重载或清活动位、调回调。 */
     static void prvProcessExpiredTimer( const TickType_t xNextExpireTime,
                                         const TickType_t xTimeNow )
     {
@@ -741,6 +706,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 守护任务主循环：取下一到期 → 阻塞或处理到期 → 排空命令队列。 */
     static portTASK_FUNCTION( prvTimerTask, pvParameters )
     {
         TickType_t xNextExpireTime;
@@ -775,6 +741,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 在调度挂起区内判断是否已到期；否则用 vQueueWaitForMessageRestricted 限时等命令。 */
     static void prvProcessTimerOrBlockTask( const TickType_t xNextExpireTime,
                                             BaseType_t xListWasEmpty )
     {
@@ -837,6 +804,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 读当前活动表最近到期 tick；空表返回 0 以便 tick 回绕时再评估。 */
     static TickType_t prvGetNextExpireTime( BaseType_t * const pxListWasEmpty )
     {
         TickType_t xNextExpireTime;
@@ -864,6 +832,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 采样 xTaskGetTickCount；检测相对上次采样是否回绕并必要时切换定时器双表。 */
     static TickType_t prvSampleTimeNow( BaseType_t * const pxTimerListsWereSwitched )
     {
         TickType_t xTimeNow;
@@ -887,6 +856,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 设置链表项到期值并入表；若相对命令时刻已视为过期则返回立即处理标志。 */
     static BaseType_t prvInsertTimerInActiveList( Timer_t * const pxTimer,
                                                   const TickType_t xNextExpiryTime,
                                                   const TickType_t xTimeNow,
@@ -931,6 +901,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 非阻塞读尽 xTimerQueue：执行延迟回调或按 xMessageID 处理定时器命令。 */
     static void prvProcessReceivedCommands( void )
     {
         DaemonTaskMessage_t xMessage = { 0 };
@@ -1086,6 +1057,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* tick 溢出：先清空当前表上到期项，再交换当前/溢出活动表指针。 */
     static void prvSwitchTimerLists( void )
     {
         TickType_t xNextExpireTime;
@@ -1111,6 +1083,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 临界区内一次性初始化双链表与命令队列（幂等）。 */
     static void prvCheckForValidListAndQueue( void )
     {
         /* Check that the list from which active timers are referenced, and the
@@ -1162,6 +1135,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 查询定时器是否处于活动（已启动且未停止）状态。 */
     BaseType_t xTimerIsTimerActive( TimerHandle_t xTimer )
     {
         BaseType_t xReturn;
@@ -1191,6 +1165,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 临界区内读取 pvTimerID。 */
     void * pvTimerGetTimerID( const TimerHandle_t xTimer )
     {
         Timer_t * const pxTimer = xTimer;
@@ -1212,6 +1187,7 @@
     }
 /*-----------------------------------------------------------*/
 
+    /* 临界区内更新 pvTimerID。 */
     void vTimerSetTimerID( TimerHandle_t xTimer,
                            void * pvNewID )
     {
@@ -1233,6 +1209,7 @@
 
     #if ( INCLUDE_xTimerPendFunctionCall == 1 )
 
+        /* ISR 中将普通函数投递到守护任务执行（与定时器命令共用队列）。 */
         BaseType_t xTimerPendFunctionCallFromISR( PendedFunction_t xFunctionToPend,
                                                   void * pvParameter1,
                                                   uint32_t ulParameter2,
@@ -1263,6 +1240,7 @@
 
     #if ( INCLUDE_xTimerPendFunctionCall == 1 )
 
+        /* 任务上下文延迟执行回调（需 xTimerQueue 已存在）。 */
         BaseType_t xTimerPendFunctionCall( PendedFunction_t xFunctionToPend,
                                            void * pvParameter1,
                                            uint32_t ulParameter2,
@@ -1298,6 +1276,7 @@
 
     #if ( configUSE_TRACE_FACILITY == 1 )
 
+        /* 读取跟踪用 uxTimerNumber。 */
         UBaseType_t uxTimerGetTimerNumber( TimerHandle_t xTimer )
         {
             traceENTER_uxTimerGetTimerNumber( xTimer );
@@ -1312,6 +1291,7 @@
 
     #if ( configUSE_TRACE_FACILITY == 1 )
 
+        /* 设置跟踪用 uxTimerNumber。 */
         void vTimerSetTimerNumber( TimerHandle_t xTimer,
                                    UBaseType_t uxTimerNumber )
         {
@@ -1325,11 +1305,9 @@
     #endif /* configUSE_TRACE_FACILITY */
 /*-----------------------------------------------------------*/
 
-/*
- * Reset the state in this file. This state is normally initialized at start up.
- * This function must be called by the application before restarting the
- * scheduler.
- */
+    /*
+     * 复位本文件全局状态（队列与守护任务句柄），供应用在不复位硬件的情况下重启调度器前调用。
+     */
     void vTimerResetState( void )
     {
         xTimerQueue = NULL;
@@ -1337,7 +1315,4 @@
     }
 /*-----------------------------------------------------------*/
 
-/* This entire source file will be skipped if the application is not configured
- * to include software timer functionality.  If you want to include software timer
- * functionality then ensure configUSE_TIMERS is set to 1 in FreeRTOSConfig.h. */
-#endif /* configUSE_TIMERS == 1 */
+#endif /* configUSE_TIMERS == 1; 为 0 时本文件整段不参与编译 */
