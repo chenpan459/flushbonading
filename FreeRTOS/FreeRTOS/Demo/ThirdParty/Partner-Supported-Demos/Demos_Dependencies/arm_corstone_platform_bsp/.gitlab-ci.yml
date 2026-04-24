@@ -1,0 +1,85 @@
+# Copyright 2023-2024 Arm Limited and/or its affiliates
+# <open-source-office@arm.com>
+# SPDX-License-Identifier: Apache-2.0
+
+default:
+  # cancel the job if a new pipeline is triggered on the same branch
+  interruptible: true
+  image: ${OPEN_IOT_SDK_DOCKER_REGISTRY}/open-iot-sdk:${OPEN_IOT_SDK_DOCKER_VERSION}
+
+variables:
+  OPEN_IOT_SDK_DOCKER_VERSION: v2
+  KUBERNETES_CPU_REQUEST: 1
+  KUBERNETES_MEMORY_REQUEST: 1Gi
+  GIT_SUBMODULE_STRATEGY: none
+  RETRY_LIMIT: 100
+
+stages:
+  - quality-check
+
+workflow:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_REF_NAME =~ /^release-.*/
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Normally, workflow rules are enabled for all the below and "main" branch
+# Since, main branch is already tested and quite heavy, we do not need to run
+# most jobs already run. The below rule skips the job on main branch.
+.base-job-rules:
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+    - if: $CI_COMMIT_REF_NAME =~ /^release-.*/
+    - if: $CI_PIPELINE_SOURCE == "web"
+    - if: $GITLAB_CI_LOCAL == "true"
+
+########################
+# License Check Job    #
+########################
+license:
+  image: ${OPEN_IOT_SDK_DOCKER_REGISTRY}/scancode:21.x
+  stage: quality-check
+  extends:
+    - .base-job-rules
+  tags:
+    - iotmsw-amd64
+  script:
+    - scancode -l --json-pp scancode_report.json $PWD/..
+    - jsonschema -i scancode_report.json $PWD/ci/license/license.schema
+  artifacts:
+    paths:
+      - scancode_report.json
+    expire_in: 1 week
+
+########################
+# Dependency check     #
+########################
+dependencies-check:
+  tags:
+    - iotmsw-amd64
+  stage: quality-check
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+  script:
+    - set -x
+    - ./ci/dependencies-check/run_dependencies_check.sh
+
+########################
+# TPIP Jobs            #
+########################
+tpip-check:
+  tags:
+    - iotmsw-amd64
+  stage: quality-check
+  rules:
+    - if: $CI_MERGE_REQUEST_ID
+  script:
+    - set -x
+    - >
+      python ${PWD}/ci/tpip-checker/tpip_checker.py
+      --server-url "${CI_SERVER_URL}"
+      --private-token "${AUTOBOT_GITLAB_TOKEN}"
+      --project-id "${CI_PROJECT_ID}"
+      --merge-req-id "${CI_MERGE_REQUEST_IID}"

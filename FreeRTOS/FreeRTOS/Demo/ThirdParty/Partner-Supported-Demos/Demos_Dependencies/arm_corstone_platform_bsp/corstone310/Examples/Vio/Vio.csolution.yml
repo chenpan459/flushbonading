@@ -1,0 +1,35 @@
+# Copyright (c) 2024 Arm Limited. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+solution:
+  created-for: ARM::V2M_MPS3_SSE_310_BSP@1.4.0
+  description: Vio example
+
+  packs:
+    - pack: ARM::CMSIS@>=6.0.0
+    - pack: ARM::CMSIS-Compiler@2.0.0
+    - pack: ARM::V2M_MPS3_SSE_310_BSP
+
+  cdefault:
+
+  target-types:
+    - type: MPS3_FVP
+      board: V2M-MPS3-SSE-310
+      device: SSE-310-MPS3_FVP
+
+  build-types:
+    - type: Debug
+      debug: on
+      optimize: none
+
+    - type: Release
+      debug: off
+      optimize: balanced
+
+  projects:
+    - project: ./Vio/Vio.cproject.yml
+
+  output-dirs:
+    cprjdir: ./build/$TargetType$/$Compiler$/$BuildType$/$Project$
+    intdir:  ./build/$TargetType$/$Compiler$/$BuildType$/$Project$/intdir
+    outdir:  ./build/$TargetType$/$Compiler$/$BuildType$/$Project$/outdir

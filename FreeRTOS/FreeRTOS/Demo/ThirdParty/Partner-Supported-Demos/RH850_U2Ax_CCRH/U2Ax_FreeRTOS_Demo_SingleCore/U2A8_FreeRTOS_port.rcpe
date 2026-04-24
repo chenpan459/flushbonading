@@ -1,0 +1,339 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<MicomToolCommonProjectFile Version="1.00">
+  <CreatorType Name="CubeSuite+" Version="V8.13.00  [05 Dec 2024]" />
+  <Placeholders>
+    <PlaceholderPrefix>%</PlaceholderPrefix>
+    <PlaceholderPostfix>%</PlaceholderPostfix>
+  </Placeholders>
+  <Project Name="U2A8_FreeRTOS_port" Type="Application">
+    <Files>
+      <Category Name="..\..\..\..\..\Demo\Common">
+        <Category Name="include">
+          <Path>..\..\..\..\Common\include\AbortDelay.h</Path>
+          <Path>..\..\..\..\Common\include\BlockQ.h</Path>
+          <Path>..\..\..\..\Common\include\blocktim.h</Path>
+          <Path>..\..\..\..\Common\include\countsem.h</Path>
+          <Path>..\..\..\..\Common\include\death.h</Path>
+          <Path>..\..\..\..\Common\include\dynamic.h</Path>
+          <Path>..\..\..\..\Common\include\EventGroupsDemo.h</Path>
+          <Path>..\..\..\..\Common\include\fileIO.h</Path>
+          <Path>..\..\..\..\Common\include\flash.h</Path>
+          <Path>..\..\..\..\Common\include\flash_timer.h</Path>
+          <Path>..\..\..\..\Common\include\flop.h</Path>
+          <Path>..\..\..\..\Common\include\GenQTest.h</Path>
+          <Path>..\..\..\..\Common\include\integer.h</Path>
+          <Path>..\..\..\..\Common\include\IntQueue.h</Path>
+          <Path>..\..\..\..\Common\include\IntSemTest.h</Path>
+          <Path>..\..\..\..\Common\include\MessageBufferAMP.h</Path>
+          <Path>..\..\..\..\Common\include\MessageBufferDemo.h</Path>
+          <Path>..\..\..\..\Common\include\mevents.h</Path>
+          <Path>..\..\..\..\Common\include\partest.h</Path>
+          <Path>..\..\..\..\Common\include\PollQ.h</Path>
+          <Path>..\..\..\..\Common\include\print.h</Path>
+          <Path>..\..\..\..\Common\include\QPeek.h</Path>
+          <Path>..\..\..\..\Common\include\QueueOverwrite.h</Path>
+          <Path>..\..\..\..\Common\include\QueueSet.h</Path>
+          <Path>..\..\..\..\Common\include\QueueSetPolling.h</Path>
+          <Path>..\..\..\..\Common\include\recmutex.h</Path>
+          <Path>..\..\..\..\Common\include\semtest.h</Path>
+          <Path>..\..\..\..\Common\include\serial.h</Path>
+          <Path>..\..\..\..\Common\include\StaticAllocation.h</Path>
+          <Path>..\..\..\..\Common\include\StreamBufferDemo.h</Path>
+          <Path>..\..\..\..\Common\include\StreamBufferInterrupt.h</Path>
+          <Path>..\..\..\..\Common\include\TaskNotify.h</Path>
+          <Path>..\..\..\..\Common\include\TaskNotifyArray.h</Path>
+          <Path>..\..\..\..\Common\include\TimerDemo.h</Path>
+        </Category>
+        <Category Name="Minimal">
+          <Path>..\..\..\..\Common\Minimal\AbortDelay.c</Path>
+          <Path>..\..\..\..\Common\Minimal\BlockQ.c</Path>
+          <Path>..\..\..\..\Common\Minimal\blocktim.c</Path>
+          <Path>..\..\..\..\Common\Minimal\countsem.c</Path>
+          <Path>..\..\..\..\Common\Minimal\crflash.c</Path>
+          <Path>..\..\..\..\Common\Minimal\crhook.c</Path>
+          <Path>..\..\..\..\Common\Minimal\death.c</Path>
+          <Path>..\..\..\..\Common\Minimal\dynamic.c</Path>
+          <Path>..\..\..\..\Common\Minimal\EventGroupsDemo.c</Path>
+          <Path>..\..\..\..\Common\Minimal\flash.c</Path>
+          <Path>..\..\..\..\Common\Minimal\flash_timer.c</Path>
+          <Path>..\..\..\..\Common\Minimal\flop.c</Path>
+          <Path>..\..\..\..\Common\Minimal\GenQTest.c</Path>
+          <Path>..\..\..\..\Common\Minimal\integer.c</Path>
+          <Path>..\..\..\..\Common\Minimal\IntQueue.c</Path>
+          <Path>..\..\..\..\Common\Minimal\IntSemTest.c</Path>
+          <Path>..\..\..\..\Common\Minimal\MessageBufferAMP.c</Path>
+          <Path>..\..\..\..\Common\Minimal\MessageBufferDemo.c</Path>
+          <Path>..\..\..\..\Common\Minimal\PollQ.c</Path>
+          <Path>..\..\..\..\Common\Minimal\QPeek.c</Path>
+          <Path>..\..\..\..\Common\Minimal\QueueOverwrite.c</Path>
+          <Path>..\..\..\..\Common\Minimal\QueueSet.c</Path>
+          <Path>..\..\..\..\Common\Minimal\QueueSetPolling.c</Path>
+          <Path>..\..\..\..\Common\Minimal\readme.txt</Path>
+          <Path>..\..\..\..\Common\Minimal\recmutex.c</Path>
+          <Path>..\..\..\..\Common\Minimal\semtest.c</Path>
+          <Path>..\..\..\..\Common\Minimal\StaticAllocation.c</Path>
+          <Path>..\..\..\..\Common\Minimal\StreamBufferDemo.c</Path>
+          <Path>..\..\..\..\Common\Minimal\StreamBufferInterrupt.c</Path>
+          <Path>..\..\..\..\Common\Minimal\TaskNotify.c</Path>
+          <Path>..\..\..\..\Common\Minimal\TaskNotifyArray.c</Path>
+          <Path>..\..\..\..\Common\Minimal\TimerDemo.c</Path>
+        </Category>
+      </Category>
+      <Category Name="..\..\..\..\..\Source">
+        <Path>..\..\..\..\..\Source\.git</Path>
+        <Path>..\..\..\..\..\Source\.git-blame-ignore-revs</Path>
+        <Path>..\..\..\..\..\Source\.gitattributes</Path>
+        <Path>..\..\..\..\..\Source\CMakeLists.txt</Path>
+        <Path>..\..\..\..\..\Source\croutine.c</Path>
+        <Path>..\..\..\..\..\Source\cspell.config.yaml</Path>
+        <Path>..\..\..\..\..\Source\event_groups.c</Path>
+        <Category Name="examples">
+          <Category Name="cmake_example">
+            <Path>..\..\..\..\..\Source\examples\cmake_example\CMakeLists.txt</Path>
+            <Path>..\..\..\..\..\Source\examples\cmake_example\main.c</Path>
+          </Category>
+          <Category Name="coverity">
+            <Path>..\..\..\..\..\Source\examples\coverity\CMakeLists.txt</Path>
+            <Path>..\..\..\..\..\Source\examples\coverity\coverity_misra.config</Path>
+            <Path>..\..\..\..\..\Source\examples\coverity\FreeRTOSConfig.h</Path>
+            <Path>..\..\..\..\..\Source\examples\coverity\README.md</Path>
+          </Category>
+          <Category Name="template_configuration">
+            <Path>..\..\..\..\..\Source\examples\template_configuration\FreeRTOSConfig.h</Path>
+            <Path>..\..\..\..\..\Source\examples\template_configuration\readme.md</Path>
+          </Category>
+        </Category>
+        <Path>..\..\..\..\..\Source\GitHub-FreeRTOS-Kernel-Home.url</Path>
+        <Path>..\..\..\..\..\Source\History.txt</Path>
+        <Category Name="include">
+          <Path>..\..\..\..\..\Source\include\atomic.h</Path>
+          <Path>..\..\..\..\..\Source\include\CMakeLists.txt</Path>
+          <Path>..\..\..\..\..\Source\include\croutine.h</Path>
+          <Path>..\..\..\..\..\Source\include\deprecated_definitions.h</Path>
+          <Path>..\..\..\..\..\Source\include\event_groups.h</Path>
+          <Path>..\..\..\..\..\Source\include\FreeRTOS.h</Path>
+          <Path>..\..\..\..\..\Source\include\list.h</Path>
+          <Path>..\..\..\..\..\Source\include\message_buffer.h</Path>
+          <Path>..\..\..\..\..\Source\include\mpu_prototypes.h</Path>
+          <Path>..\..\..\..\..\Source\include\mpu_syscall_numbers.h</Path>
+          <Path>..\..\..\..\..\Source\include\mpu_wrappers.h</Path>
+          <Path>..\..\..\..\..\Source\include\newlib-freertos.h</Path>
+          <Path>..\..\..\..\..\Source\include\picolibc-freertos.h</Path>
+          <Path>..\..\..\..\..\Source\include\portable.h</Path>
+          <Path>..\..\..\..\..\Source\include\projdefs.h</Path>
+          <Path>..\..\..\..\..\Source\include\queue.h</Path>
+          <Path>..\..\..\..\..\Source\include\semphr.h</Path>
+          <Path>..\..\..\..\..\Source\include\StackMacros.h</Path>
+          <Path>..\..\..\..\..\Source\include\stack_macros.h</Path>
+          <Path>..\..\..\..\..\Source\include\stdint.readme</Path>
+          <Path>..\..\..\..\..\Source\include\stream_buffer.h</Path>
+          <Path>..\..\..\..\..\Source\include\task.h</Path>
+          <Path>..\..\..\..\..\Source\include\timers.h</Path>
+        </Category>
+        <Path>..\..\..\..\..\Source\LICENSE.md</Path>
+        <Path>..\..\..\..\..\Source\list.c</Path>
+        <Path>..\..\..\..\..\Source\manifest.yml</Path>
+        <Path>..\..\..\..\..\Source\MISRA.md</Path>
+        <Category Name="portable">
+          <Path>..\..\..\..\..\Source\portable\CMakeLists.txt</Path>
+          <Category Name="Common">
+            <Path>..\..\..\..\..\Source\portable\Common\mpu_wrappers.c</Path>
+            <Path>..\..\..\..\..\Source\portable\Common\mpu_wrappers_v2.c</Path>
+          </Category>
+          <Category Name="MemMang">
+            <Path>..\..\..\..\..\Source\portable\MemMang\heap_1.c</Path>
+            <Path>..\..\..\..\..\Source\portable\MemMang\heap_2.c</Path>
+            <Path>..\..\..\..\..\Source\portable\MemMang\heap_3.c</Path>
+            <Path>..\..\..\..\..\Source\portable\MemMang\heap_4.c</Path>
+            <Path>..\..\..\..\..\Source\portable\MemMang\heap_5.c</Path>
+            <Path>..\..\..\..\..\Source\portable\MemMang\ReadMe.url</Path>
+          </Category>
+          <Path>..\..\..\..\..\Source\portable\readme.txt</Path>
+          <Category Name="template">
+            <Path>..\..\..\..\..\Source\portable\template\port.c</Path>
+            <Path>..\..\..\..\..\Source\portable\template\portmacro.h</Path>
+          </Category>
+        </Category>
+        <Path>..\..\..\..\..\Source\queue.c</Path>
+        <Path>..\..\..\..\..\Source\Quick_Start_Guide.url</Path>
+        <Path>..\..\..\..\..\Source\README.md</Path>
+        <Path>..\..\..\..\..\Source\sbom.spdx</Path>
+        <Path>..\..\..\..\..\Source\stream_buffer.c</Path>
+        <Path>..\..\..\..\..\Source\tasks.c</Path>
+        <Path>..\..\..\..\..\Source\timers.c</Path>
+      </Category>
+      <Category Name="..\..\..\..\..\Source\portable\ThirdParty\Partner-Supported-Ports\CCRH\U2x">
+        <Path>..\..\..\..\..\Source\portable\ThirdParty\Partner-Supported-Ports\CCRH\U2x\port.c</Path>
+        <Path>..\..\..\..\..\Source\portable\ThirdParty\Partner-Supported-Ports\CCRH\U2x\portasm.s</Path>
+        <Path>..\..\..\..\..\Source\portable\ThirdParty\Partner-Supported-Ports\CCRH\U2x\portmacro.h</Path>
+      </Category>
+      <Category Name="freertos_cfg">
+        <Path>freertos_cfg\FreeRTOSConfig.h</Path>
+        <Path>freertos_cfg\FreeRTOSConfigSingleCore.h</Path>
+      </Category>
+      <Category Name="src">
+        <Path>src\main0.c</Path>
+        <Path>src\RegTestsTask.c</Path>
+        <Path>src\TestRunner.c</Path>
+        <Path>src\RegTest.s</Path>
+        <Path>src\RegTests.h</Path>
+        <Path>src\TestRunner.h</Path>
+        <Path>src\Config_UART0.c</Path>
+        <Path>src\Config_UART0.h</Path>
+      </Category>
+      <Category Name="startup">
+        <Path>startup\coldreset.asm</Path>
+        <Path>startup\startup_PE0.asm</Path>
+        <Path>startup\startup_PEn.asm</Path>
+      </Category>
+      <Category Name="bsp">
+        <Category Name="bsp_irq">
+          <Path>bsp\bsp_irq\vector_data.h</Path>
+        </Category>
+        <Category Name="common">
+          <Path>bsp\common\bsp_compiler_support.h</Path>
+          <Path>bsp\common\iodefine.h</Path>
+        </Category>
+      </Category>
+    </Files>
+    <DebugOptions>
+      <ConnectSettings>
+        <MainClock>40000000</MainClock>
+      </ConnectSettings>
+      <DebugToolSettings />
+    </DebugOptions>
+    <Device Series="RH850">R7F702301B</Device>
+    <BuildOptions Name="CC-RH" Version="V2.07.00">
+      <BuildMode Name="DefaultBuild" Active="True">
+        <LinkOrder>
+          <Path>DefaultBuild\croutine.obj</Path>
+          <Path>DefaultBuild\event_groups.obj</Path>
+          <Path>DefaultBuild\list.obj</Path>
+          <Path>DefaultBuild\queue.obj</Path>
+          <Path>DefaultBuild\stream_buffer.obj</Path>
+          <Path>DefaultBuild\tasks.obj</Path>
+          <Path>DefaultBuild\timers.obj</Path>
+          <Path>DefaultBuild\heap_4.obj</Path>
+          <Path>DefaultBuild\main0.obj</Path>
+          <Path>DefaultBuild\coldreset.obj</Path>
+          <Path>DefaultBuild\startup_PE0.obj</Path>
+          <Path>DefaultBuild\startup_PEn.obj</Path>
+          <Path>DefaultBuild\RegTestsTask.obj</Path>
+          <Path>DefaultBuild\TestRunner.obj</Path>
+          <Path>DefaultBuild\RegTest.obj</Path>
+          <Path>DefaultBuild\AbortDelay.obj</Path>
+          <Path>DefaultBuild\BlockQ.obj</Path>
+          <Path>DefaultBuild\blocktim.obj</Path>
+          <Path>DefaultBuild\countsem.obj</Path>
+          <Path>DefaultBuild\crflash.obj</Path>
+          <Path>DefaultBuild\crhook.obj</Path>
+          <Path>DefaultBuild\death.obj</Path>
+          <Path>DefaultBuild\dynamic.obj</Path>
+          <Path>DefaultBuild\EventGroupsDemo.obj</Path>
+          <Path>DefaultBuild\flop.obj</Path>
+          <Path>DefaultBuild\GenQTest.obj</Path>
+          <Path>DefaultBuild\integer.obj</Path>
+          <Path>DefaultBuild\IntSemTest.obj</Path>
+          <Path>DefaultBuild\MessageBufferAMP.obj</Path>
+          <Path>DefaultBuild\MessageBufferDemo.obj</Path>
+          <Path>DefaultBuild\PollQ.obj</Path>
+          <Path>DefaultBuild\QPeek.obj</Path>
+          <Path>DefaultBuild\QueueOverwrite.obj</Path>
+          <Path>DefaultBuild\QueueSet.obj</Path>
+          <Path>DefaultBuild\QueueSetPolling.obj</Path>
+          <Path>DefaultBuild\recmutex.obj</Path>
+          <Path>DefaultBuild\semtest.obj</Path>
+          <Path>DefaultBuild\StaticAllocation.obj</Path>
+          <Path>DefaultBuild\StreamBufferDemo.obj</Path>
+          <Path>DefaultBuild\StreamBufferInterrupt.obj</Path>
+          <Path>DefaultBuild\TaskNotify.obj</Path>
+          <Path>DefaultBuild\TaskNotifyArray.obj</Path>
+          <Path>DefaultBuild\TimerDemo.obj</Path>
+          <Path>DefaultBuild\port.obj</Path>
+          <Path>DefaultBuild\portasm.obj</Path>
+          <Path>DefaultBuild\Config_UART0.obj</Path>
+        </LinkOrder>
+        <CommonOptions>
+          <IncludePathForC>freertos_cfg</IncludePathForC>
+          <IncludePathForC>..\..\..\..\..\Demo\Common\include</IncludePathForC>
+          <IncludePathForC>..\..\..\..\..\Source\include</IncludePathForC>
+          <IncludePathForC>src</IncludePathForC>
+          <IncludePathForC>..\..\..\..\..\Source\portable\ThirdParty\Partner-Supported-Ports\CCRH\U2x</IncludePathForC>
+          <IncludePathForC>..\..\..\..\..\Source\portable</IncludePathForC>
+          <IncludePathForC>..\..\..\..\..\Source\include</IncludePathForC>
+          <IncludePathForC>bsp\bsp_irq</IncludePathForC>
+          <IncludePathForC>bsp\common</IncludePathForC>
+          <IncludePathForC>..\..\..\..\..\Demo\Common\include</IncludePathForC>
+          <IncludePathForC>..\..\..\..\..\Demo\Common\Minimal</IncludePathForC>
+        </CommonOptions>
+        <GeneralOptions>
+          <SimultaneouslyBuild>False</SimultaneouslyBuild>
+        </GeneralOptions>
+        <CompileOptions>
+          <Option>-Xobj_path=%BuildModeName%</Option>
+          <Option>-Xcpu=g4mh</Option>
+          <Option>-g</Option>
+          <Option>-g_line</Option>
+          <Option>-Onothing</Option>
+          <Option>-Ifreertos_cfg</Option>
+          <Option>-I..\..\..\..\..\Demo\Common\include</Option>
+          <Option>-I..\..\..\..\..\Source\include</Option>
+          <Option>-Isrc</Option>
+          <Option>-I..\..\..\..\..\Source\portable\ThirdParty\Partner-Supported-Ports\CCRH\U2x</Option>
+          <Option>-I..\..\..\..\..\Source\portable</Option>
+          <Option>-I..\..\..\..\..\Source\include</Option>
+          <Option>-Ibsp\bsp_irq</Option>
+          <Option>-Ibsp\common</Option>
+          <Option>-I..\..\..\..\..\Demo\Common\include</Option>
+          <Option>-I..\..\..\..\..\Demo\Common\Minimal</Option>
+          <Option>-lang=c99</Option>
+          <Option>-c</Option>
+        </CompileOptions>
+        <AssembleOptions>
+          <Option>-Xobj_path=%BuildModeName%</Option>
+          <Option>-Xcpu=g4mh</Option>
+          <Option>-g</Option>
+          <Option>-DconfigDISABLE_FXU</Option>
+          <Option>-c</Option>
+        </AssembleOptions>
+        <LinkOptions>
+          <Option>-debug</Option>
+          <Option>-nocompress</Option>
+          <Option>-NOOPtimize</Option>
+          <Option>-output=%BuildModeName%\%ProjectName%.abs</Option>
+          <Option>-library=v850e3v5\rhf8n.lib</Option>
+          <Option>-library=v850e3v5\libmalloc.lib</Option>
+          <Option>-list=%BuildModeName%\%ProjectName%.map</Option>
+          <Option>-show=symbol,total_size</Option>
+          <Option>-start=RESET,STARTUP_CODE_PE0,STARTUP_CODE_PEn,STARTUP_CODE/00000000,ex_entry_PE0/00001000,.const,.INIT_BSEC.const,.INIT_DSEC.const,.data,.text/00004000,.inttable_PE0.const/00040000,.stack.bss/FDC00000,.data.R,.bss,.mev_address.bss/FE000000</Option>
+          <Option>-rom=.data=.data.R</Option>
+          <Option>-memory=high</Option>
+          <Option>-nologo</Option>
+          <Option>-END</Option>
+          <Option>-Input=%BuildModeName%\%ProjectName%.abs</Option>
+          <Option>-output=%BuildModeName%\%ProjectName%.mot</Option>
+          <Option>-form=stype</Option>
+          <Option>-EXIt</Option>
+        </LinkOptions>
+        <IOHeaderGenerationOptions>
+          <Option>"-df=C:\Program Files (x86)\Renesas Electronics\CS+\CC\Device\RH850\Devicefile\DR7F702301B.DVF"</Option>
+          <Option>-o=C:\An_Nguyen\FSP\GIT_FreeRTOS_Refer\GIT_FreeRTOS_Community\FreeRTOS\FreeRTOS\Demo\ThirdParty\Partner-Supported-Demos\RH850_U2Ax_CCRH\U2Ax_FreeRTOS_Demo_SingleCore\iodefine.h</Option>
+          <Option>-def=off</Option>
+          <Option>-f</Option>
+          <UpdateIOMode>None</UpdateIOMode>
+        </IOHeaderGenerationOptions>
+        <NoTargetFile Target="..\..\..\..\..\Source\examples\cmake_example\main.c" />
+        <NoTargetFile Target="..\..\..\..\..\Source\portable\Common\mpu_wrappers.c" />
+        <NoTargetFile Target="..\..\..\..\..\Source\portable\Common\mpu_wrappers_v2.c" />
+        <NoTargetFile Target="..\..\..\..\..\Source\portable\MemMang\heap_1.c" />
+        <NoTargetFile Target="..\..\..\..\..\Source\portable\MemMang\heap_2.c" />
+        <NoTargetFile Target="..\..\..\..\..\Source\portable\MemMang\heap_3.c" />
+        <NoTargetFile Target="..\..\..\..\..\Source\portable\MemMang\heap_5.c" />
+        <NoTargetFile Target="..\..\..\..\..\Source\portable\template\port.c" />
+        <NoTargetFile Target="..\..\..\..\Common\Minimal\flash.c" />
+        <NoTargetFile Target="..\..\..\..\Common\Minimal\flash_timer.c" />
+        <NoTargetFile Target="..\..\..\..\Common\Minimal\IntQueue.c" />
+      </BuildMode>
+    </BuildOptions>
+  </Project>
+</MicomToolCommonProjectFile>

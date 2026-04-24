@@ -1,0 +1,28 @@
+# Copyright (c) 2024 Arm Limited. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+project:
+  packs:
+    - pack: ARM::SSE_315_BSP@1.0.0
+
+  groups:
+    - group: Documentation
+      files:
+        - file: ./Abstract.txt
+    - group: Main
+      files:
+        - file: ./main.c
+
+  components:
+    - component: CMSIS:CORE
+    - component: CMSIS Driver:VIO
+    - component: CMSIS Driver:USART
+    - component: Device:Definition
+    - component: Device:Native Driver:SysCounter
+    - component: Device:Native Driver:SysTimer
+    - component: Device:Native Driver:Timeout
+    - component: Device:Native Driver:UART
+    - component: Device:Startup&C Startup
+    - component: Compiler:CORE
+    - component: Compiler:STDOUT:Custom
+    - component: Device:USART Retarget

@@ -1,0 +1,38 @@
+# Copyright (c) 2024 Arm Limited. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+solution:
+  created-for: ARM::V2M_MPS3_SSE_310_BSP@1.4.0
+  description: Blinky example
+
+  packs:
+    - pack: ARM::CMSIS@6.0.0
+    - pack: ARM::CMSIS-Compiler@2.0.0
+    - pack: ARM::V2M_MPS3_SSE_310_BSP
+
+  cdefault:
+
+  target-types:
+    - type: MPS3_FVP
+      board: V2M-MPS3-SSE-310
+      device: SSE-310-MPS3_FVP
+    - type: MPS3_AN555
+      board: V2M-MPS3-SSE-310
+      device: SSE-310-MPS3_AN555
+
+  build-types:
+    - type: Debug
+      debug: on
+      optimize: none
+
+    - type: Release
+      debug: off
+      optimize: balanced
+
+  projects:
+    - project: ./Blinky/Blinky.cproject.yml
+
+  output-dirs:
+    cprjdir: ./build/$TargetType$/$Compiler$/$BuildType$/$Project$
+    intdir:  ./build/$TargetType$/$Compiler$/$BuildType$/$Project$/intdir
+    outdir:  ./build/$TargetType$/$Compiler$/$BuildType$/$Project$/outdir

@@ -1,0 +1,14 @@
+name : "Arm Corstone-3xx Platform BSP"
+version: "v0.3.0"
+description: |-
+  "Arm Corstone-3xx Platform CMSIS-Driver Based Board Support Package"
+dependencies:
+  - name: "CMSIS_6"
+    license: "Apache-2.0"
+    tpip-category: "category-2"
+    security-risk: "low"
+    version: "v6.1.0"
+    repository:
+      type: "git"
+      url: "https://github.com/ARM-software/CMSIS_6.git"
+      path: "CMSIS/CMSIS_6"

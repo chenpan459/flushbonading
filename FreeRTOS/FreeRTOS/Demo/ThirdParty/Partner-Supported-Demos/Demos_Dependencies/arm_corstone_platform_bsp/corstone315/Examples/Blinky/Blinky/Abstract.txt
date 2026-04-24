@@ -1,0 +1,3 @@
+This is a secure Blinky example to be used with the Corstone-SSE-315 FVP.
+
+Copyright (c) 2024 Arm Limited. All rights reserved. SPDX-License-Identifier: Apache-2.0

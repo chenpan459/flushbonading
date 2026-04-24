@@ -1,0 +1,653 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright (c) 2020-2024 ARM Limited
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ -->
+<package schemaVersion="1.7.28" xmlns:xs="http://www.w3.org/2001/XMLSchema-instance" xs:noNamespaceSchemaLocation="https://raw.githubusercontent.com/Open-CMSIS-Pack/Open-CMSIS-Pack-Spec/v1.7.28/schema/PACK.xsd">
+  <vendor>ARM</vendor>
+  <url>http://www.keil.com/pack/</url>
+  <supportContact>support-subsystem-iot@arm.com</supportContact>
+  <name>V2M_MPS3_SSE_310_BSP</name>
+  <description>
+    ARM V2M-MPS3 Board Support PACK for CoreLink SSE-310 - TrustZone enabled subsystem for embedded.
+  </description>
+  <releases>
+    <release version="1.4.0" date="2024-02-15" tag="1.4.0">
+      - Add CMSIS-Compiler UART STDOUT default retarget support
+      - Rename 'UART STDOUT' to 'UART Retarget'
+      - Update to CMSIS 6
+      - Update RTE definition inconsistencies
+      - Remove deprecated component 'Device:Native Driver:Watch Dog', use 'Device:Native Driver:Watchdog' instead
+    </release>
+    <release version="1.3.0" date="2023-10-16" tag="1.3.0">
+      - Add IAR Embedded Workbench support.
+      - Add UART STDOUT.
+      - Add empty main.c template file under Device::Startup.
+      - Fix Device::Startup and Device::Definitions modul inconsistency. Now Startup is enough to compile an executable, and is not needed to compile a library.
+      - Move MPC and PPC from CMSIS Drivers to Device/Native Drivers only.
+      - Move Native Drivers under Device category.
+      - Remove ARMCLANG and GCC compiler dependency from Device.
+      - Remove Device::Timeout dependency from Device.
+      - Renamed linker scripts from fvp_sse310_mps3_s to linker_SSE310MPS3_secure.
+    </release>
+    <release version="1.2.0" date="2023-02-15">
+      - Add AN555 support
+    </release>
+    <release version="1.1.0" date="2022-09-30">
+      - Add GCC support
+      - DMA350 Native Driver moved to separate pack (ARM.DMA350)
+      - Add DMA MCU Driver Hal Implementation
+      - Update PPC bit assignments
+    </release>
+    <release version="1.0.0" date="2022-06-07">
+      First version of MPS3 Board Support Pack for Corstone SSE-310 - TrustZone enabled subsystem including device definition.
+    </release>
+  </releases>
+
+  <requirements>
+    <packages>
+      <package vendor="ARM" name="CMSIS" version="6.0.0" />
+      <package vendor="ARM" name="CMSIS-Compiler" version="2.0.0" />
+      <package vendor="ARM" name="DMA350" version="1.0.0"/>
+    </packages>
+  </requirements>
+
+  <keywords>
+    <!-- keywords for indexing -->
+    <keyword>ARM</keyword>
+    <keyword>Device Support</keyword>
+    <keyword>Device Family Package ARM CMSDK</keyword>
+    <keyword>Board Support Package for V2M-MPS3</keyword>
+    <keyword>SSE-310-MPS3</keyword>
+    <keyword>SSE-310</keyword>
+    <keyword>Corstone-310</keyword>
+    <keyword>AN555</keyword>
+  </keywords>
+
+  <devices>
+    <!-- ****************************** ARM MPS3 SSE-310 Cortex-M85  *********************** -->
+    <family Dfamily="ARM Cortex M85" Dvendor="ARM:82">
+      <description>SSE-310 for MPS3 (TrustZone enabled subsystem).</description>
+      <book name="Documents/arm_corstone_sse-310_example_subsystem_technical_reference_manual_102778_0000_01_en.pdf" title ="Arm® SSE-310 - Technical Reference Manual"/>
+      <book name="Documents/Corstone_SSE-310_FVP_Technical_Overview.pdf" title ="Arm® Corstone™-310 Foundation IP Technical Overview"/>
+      <book name="Documents/DAI0555B_SSE310_with_M85_and_U55_FPGA_for_mps3.pdf" title ="Arm® Corstone™ SSE-310 with Cortex®-M85 and Ethos™-U55 : Example Subsystem for MPS3"/>
+      <book name="Documents/SSE_310_MPS3_BSP_Pack_User_Guide.pdf" title ="Arm® SSE-310 MPS3 BSP Pack User Guide"/>
+
+      <memory name="IROM1" access="rxn"  start="0x11000000" size="0x00200000" startup="1" default="1"/>
+      <memory name="IRAM1" access="rwxn" start="0x31000000" size="0x00020000" init   ="0" default="1"/>
+
+      <memory name="ITCM_NS"      access="rwxn" start="0x00000000" size="0x00008000" startup="0" default="1" alias="ITCM_S"/>
+      <memory name="SRAM_NS"      access="rwxn" start="0x01000000" size="0x00200000" startup="0" default="1" alias="SRAM_S"/>
+      <memory name="DTCM0_NS"     access="rwxn" start="0x20000000" size="0x00002000" startup="0" default="1" alias="DTCM0_S"/>
+      <memory name="DTCM1_NS"     access="rwxn" start="0x20002000" size="0x00002000" startup="0" default="1" alias="DTCM1_S"/>
+      <memory name="DTCM2_NS"     access="rwxn" start="0x20004000" size="0x00002000" startup="0" default="1" alias="DTCM2_S"/>
+      <memory name="DTCM3_NS"     access="rwxn" start="0x20006000" size="0x00002000" startup="0" default="1" alias="DTCM3_S"/>
+      <memory name="ISRAM0_NS"    access="rwxn" start="0x21000000" size="0x00200000" startup="0" default="1" alias="ISRAM0_S"/>
+      <memory name="ISRAM1_NS"    access="rwxn" start="0x21200000" size="0x00200000" startup="0" default="1" alias="ISRAM1_S"/>
+      <memory name="QSPI_SRAM_NS" access="rwxn" start="0x28000000" size="0x00800000" startup="0" default="1" alias="QSPI_SRAM_S"/>
+
+      <memory name="ITCM_S"       access="rwxs" start="0x10000000" size="0x00008000" startup="0" default="1"/>
+      <memory name="SRAM_S"       access="rwxs" start="0x11000000" size="0x00200000" startup="0" default="1"/>
+      <memory name="DTCM0_S"      access="rwxs" start="0x30000000" size="0x00002000" startup="0" default="1"/>
+      <memory name="DTCM1_S"      access="rwxs" start="0x30002000" size="0x00002000" startup="0" default="1"/>
+      <memory name="DTCM2_S"      access="rwxs" start="0x30004000" size="0x00002000" startup="0" default="1"/>
+      <memory name="DTCM3_S"      access="rwxs" start="0x30006000" size="0x00002000" startup="0" default="1"/>
+      <memory name="ISRAM0_S"     access="rwxs" start="0x31000000" size="0x00200000" startup="0" default="1"/>
+      <memory name="ISRAM1_S"     access="rwxs" start="0x31200000" size="0x00200000" startup="0" default="1"/>
+      <memory name="QSPI_SRAM_S"  access="rwxs" start="0x38000000" size="0x00800000" startup="0" default="1"/>
+
+      <debugvars configfile="Device/Debug/CM85.dbgconf">
+        // Debug Authentication Variables
+        __var DAuthFixed  = 0x1;     // 1 - Use fixed authentication, 0 - Ask for user input
+        __var DAuthConfig = 0xF;     // Authentication Value (Security Control Block)
+        // Bit 0 - Invasive Debug (Hardwired to 1)
+        // Bit 1 - Non-Invasive Debug (Hardwired to 1)
+        // Bit 2 - Invasive Secure Debug
+        // Bit 3 - Non-Invasive Secure Debug
+      </debugvars>
+
+      <sequences>
+        <!-- Local processor reset not avaialable in ARMv8-M -->
+        <sequence name="ResetProcessor" disable="true"/>
+
+        <sequence name="DebugDeviceUnlock">
+          <block>
+            __var DAuthUserInput  = 0;
+            __var DAUTHSTATUS_Val = 0;
+            __var DHCSR_Val       = 0;
+            __var SecureDebugEna   = 0;
+            __var SecureDebugAvail = 0;
+            __var DAuthVal         = 0;
+            __var SECDBGSTAT_Val   = 0;
+            __var SECDBGSET_Val    = 0;
+            __var SECDBGCLR_Val    = 0;
+            __var RESET_MASK       = 0;
+
+            DAUTHSTATUS_Val  = Read32(0xE000EFB8);    // struct CoreDebug_Type of v8m/v8.1m
+            DHCSR_Val        = Read32(0xE000EDF0);    // struct CoreDebug_Type of v8m/v8.1m
+            SecureDebugAvail = (DAUTHSTATUS_Val &amp; 0x00000020) ? 1 : 0;  // SID: Secure Invasive Debug Implemented
+
+            RESET_MASK  = Read32(0x58021104);  // SSE-310 System Control Element - System Control register block - RESET_MASK register
+            RESET_MASK |= (1 &lt;&lt; 4) | (1 &lt;&lt; 6);   // RESET_MASK: Enable SYSRESETREQ0_EN and LOCKUP0_EN
+            Write32(0x58021104, RESET_MASK);
+          </block>
+
+          <control if="SecureDebugAvail" info="Configure Debug Authentication if Security Extensions available">
+            <block>
+              SecureDebugEna = ((DHCSR_Val &amp; 0x00100000) || ((DAUTHSTATUS_Val &amp; 0x00000030) == 0x00000030)) ? 1 : 0;
+            </block>
+
+            <control if="DAuthFixed">
+              <block>
+                // Debug Authentication as per Debug Configuration File
+                DAuthVal = DAuthConfig;
+              </block>
+            </control>
+            <control if="DAuthFixed == 0">
+              <block>
+                DAuthUserInput = Query(1, "Enable Secure Debug?", 3);
+              </block>
+              <control if="DAuthUserInput == 3">
+                <block>
+                  // Enable Secure Debug
+                  DAuthVal = 0xF;
+                </block>
+              </control>
+              <control if="DAuthUserInput != 3">
+                <block>
+                  // Disable Secure Debug
+                  DAuthVal = 0x3;
+                </block>
+              </control>
+            </control>
+
+            <control if="SecureDebugEna">
+              <block>
+                // Read Secure Debug Authentication Status
+                SECDBGSTAT_Val = Read32(0x58021000); // SSE-310 System Control Element - System Control register block - SECDBGSTAT register
+
+                // Assemble SECDBGSET and SECDBGCLR Values
+                SECDBGSET_Val  = 0x000000AA;                                // Use internal signals:
+                                                                            // DBGEN_SEL_SET   - 1,
+                                                                            // NIDEN_SEL_SET   - 1,
+                                                                            // SPIDEN_SEL_SET  - 1,
+                                                                            // SPNIDEN_SEL_SET - 1
+
+                SECDBGSET_Val |=  DAuthVal &amp; 0x1;                       // DBGEN_I_SET
+                SECDBGSET_Val |= (DAuthVal &amp; 0x2) &lt;&lt; 1;           // NIDEN_I_SET
+                SECDBGSET_Val |= (DAuthVal &amp; 0x4) &lt;&lt; 2;           // SPIDEN_I_SET
+                SECDBGSET_Val |= (DAuthVal &amp; 0x8) &lt;&lt; 3;           // SPNIDEN_I_SET
+
+                SECDBGCLR_Val |=   (DAuthVal ^ 0x1) &amp; 0x1;              // DBGEN_I_SET
+                SECDBGCLR_Val |= (((DAuthVal ^ 0x2) &amp; 0x2) &lt;&lt; 1); // NIDEN_I_SET
+                SECDBGCLR_Val |= (((DAuthVal ^ 0x4) &amp; 0x4) &lt;&lt; 2); // SPIDEN_I_SET
+                SECDBGCLR_Val |= (((DAuthVal ^ 0x8) &amp; 0x8) &lt;&lt; 3); // SPNIDEN_I_SET
+
+                // Write Secure Debug Authentication Set Register
+                Write32(0x58021004, SECDBGSET_Val); // SSE-310 System Control Element - System Control register block - SECDBGSTAT register
+
+                // Write Secure Debug Authentication Clear Register
+                Write32(0x58021008, SECDBGCLR_Val); // SSE-310 System Control Element - System Control register block - SECDBGSTAT register
+              </block>
+            </control>
+            <control if="SecureDebugEna == 0">
+              <control if="DAuthVal &amp; 0x4">
+                <block>
+                  Query(0, "Cannot configure Debug Authentication, secure debug disabled! Please reboot Board!", 1);
+                </block>
+              </control>
+            </control>
+
+          </control>
+        </sequence>
+      </sequences>
+
+      <device Dname="SSE-310-MPS3_FVP">
+        <processor Dcore="Cortex-M85" DcoreVersion="r0p0" Dpacbti="PACBTI" Dmpu="MPU" Dfpu="DP_FPU" Dmve="FP_MVE" Ddsp="DSP" Dtz="TZ" Dendian="Configurable" Dclock="25000000"/>
+        <debugconfig default="swd" dormant="true"/>
+        <accessportV2 __apid="0" _dp="0" address="0"/>
+        <debug svd="SVD/SSE310.svd" __apid="0"/>
+        <compile header="Device/Include/SSE310MPS3.h" define="CORSTONE310_FVP"/>
+        <description>
+          "Suitable for Fixed Virtual Platform (FVP). Pack version 1.2.0"
+        </description>
+      </device>
+
+      <device Dname="SSE-310-MPS3_AN555">
+        <processor Dcore="Cortex-M85" DcoreVersion="r0p0" Dpacbti="PACBTI" Dmpu="MPU" Dfpu="DP_FPU" Dmve="FP_MVE" Ddsp="DSP" Dtz="TZ" Dendian="Configurable" Dclock="25000000"/>
+        <debugconfig default="swd" dormant="true"/>
+        <accessportV2 __apid="0" _dp="0" address="0"/>
+        <debug svd="SVD/SSE310.svd" __apid="0"/>
+        <compile header="Device/Include/SSE310MPS3.h" define="CORSTONE310_AN555"/>
+        <description>
+        "Suitable for FPGA image AN555 for Arm MPS3 board. Pack version 1.2.0"
+        </description>
+      </device>
+
+    </family>
+  </devices>
+
+  <conditions>
+    <condition id="SSE-310-MPS3 Device">
+      <description>SSE-310-MPS3 device and CMSIS-Core</description>
+      <accept Dvendor="ARM:82" Dname="SSE-310-MPS3_FVP"/>
+      <accept Dvendor="ARM:82" Dname="SSE-310-MPS3_AN555"/>
+      <require Cclass="CMSIS" Cgroup="CORE" Cversion="6.0.0"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 USART">
+      <description>SSE-310-MPS3 USART Device</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Native Driver" Csub="UART"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 USART Retarget">
+      <description>SSE-310-MPS3 USART Retarget</description>
+      <require Cclass="CMSIS Driver" Cgroup="USART"/>
+      <require Cclass="CMSIS-Compiler" Cgroup="STDOUT" Csub="Custom"/>
+      <require condition="SSE-310-MPS3 Device"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 FLASH">
+      <description>SSE-310-MPS3 Flash Device</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+      <require Cclass="Device" Cgroup="Native Driver" Csub="Flash"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 SPI">
+      <description>SSE-310-MPS3 SPI Device</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Native Driver" Csub="SPI"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 I2C SBCon">
+      <description>SSE-310-MPS3 I2C SBCon Device</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Native Driver" Csub="I2C SBCon"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 Timeout">
+      <description>SSE-310-MPS3 Timeout</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+      <require condition="SSE-310-MPS3 Systimer Syscounter"/>
+      <require Cclass="Device" Cgroup="Native Driver" Csub="Timeout"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 Systimer Syscounter">
+      <description>SSE-310-MPS3 Systimer SysCounter</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+      <require Cclass="Device" Cgroup="Native Driver" Csub="SysCounter"/>
+      <require Cclass="Device" Cgroup="Native Driver" Csub="SysTimer"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 MPC">
+      <description>SSE-310-MPS3 MPC Device</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 PPC">
+      <description>SSE-310-MPS3 PPC Device</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 DMA350">
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+      <require Dvendor="ARM:82" Dname="SSE-310-MPS3_FVP"/>
+      <require Cclass="Native Driver" Cgroup="DMA350"/>
+    </condition>
+
+    <condition id="SSE-310-MPS3 VIO">
+      <description>SSE-310-MPS3 Vio</description>
+      <require condition="SSE-310-MPS3 Device"/>
+      <require Cclass="Device" Cgroup="Definition"/>
+      <require Cclass="CMSIS Driver" Cgroup="VIO"/>
+    </condition>
+
+  </conditions>
+
+  <components>
+    <!-- SSE-310 Startup -->
+    <component Cclass="Device" Cgroup="Startup" Cvariant="C Startup" Cversion="2.0.0" condition="SSE-310-MPS3 Device">
+      <description>Secure System and Startup definitions for ARM SSE-310-MPS3 device</description>
+      <files>
+        <!-- startup / system file -->
+        <file category="source" name="Device/Source/startup_SSE310MPS3.c" attr="config" version="1.1.0"/>
+        <file category="header" name="Device/Include/system_SSE310MPS3.h" version="1.0.0"/>
+        <file category="source" name="Device/Source/system_SSE310MPS3.c" attr="config" version="1.1.0"/>
+        <!-- Platform include path -->
+        <file category="include" name="Board/Platform/"/>
+        <!-- Templates -->
+        <file category="source" name="Examples/templates/empty_main.c" attr="template" select="Empty Main"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Definition" Cversion="2.0.0" condition="SSE-310-MPS3 Device">
+      <description>Device definitions for ARM SSE-310-MPS3</description>
+      <files>
+        <!-- device configuration -->
+        <file category="header" name="CMSIS_Driver/Config/cmsis_driver_config.h" version="1.1.0"/>
+        <file category="header" name="Device/Config/device_cfg.h" attr="config" version="1.1.0"/>
+        <!-- device include path -->
+        <file category="include" name="Device/Include/"/>
+        <!-- board definitions -->
+        <file category="header" name="Board/Platform/platform_base_address.h" version="1.0.0"/>
+        <file category="header" name="Board/Device_Definition/device_definition.h" version="1.1.3"/>
+        <file category="source" name="Board/Device_Definition/device_definition.c" version="1.1.3"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="USART Retarget" Cversion="1.0.0" condition="SSE-310-MPS3 USART Retarget">
+      <description>SSE-310-MPS3 default retarget USART</description>
+      <files>
+        <!-- board definitions -->
+        <file category="source" name="Device/Source/retarget.c" attr="config" version="1.0.0"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="UART" Cversion="1.1.0" condition="SSE-310-MPS3 Device">
+      <description>Native UART driver for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/uart_cmsdk_drv.c"/>
+        <file category="header" name="Device/Include/uart_cmsdk_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="IO" Cversion="1.0.1" condition="SSE-310-MPS3 Device">
+      <description>Native IO driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_MPS3_IO      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="Device/Source/arm_mps3_io_drv.c"/>
+        <file category="header" name="Device/Include/arm_mps3_io_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="SysTimer" Cversion="1.0.0" condition="SSE-310-MPS3 Device">
+      <description>Native SysTimer driver for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/systimer_armv8-m_drv.c"/>
+        <file category="header" name="Device/Include/systimer_armv8-m_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="SysCounter" Cversion="1.0.1" condition="SSE-310-MPS3 Device">
+      <description>Native SysCounter driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_SYSCOUNTER      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="Device/Source/syscounter_armv8-m_cntrl_drv.c"/>
+        <file category="header" name="Device/Include/syscounter_armv8-m_cntrl_drv.h"/>
+        <file category="source" name="Device/Source/syscounter_armv8-m_read_drv.c"/>
+        <file category="header" name="Device/Include/syscounter_armv8-m_read_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="MPC" Cversion="1.2.0" condition="SSE-310-MPS3 MPC">
+      <description>Native MPC driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_SRAM_MPC      1
+        #define RTE_ISRAM0_MPC    1
+        #define RTE_ISRAM1_MPC    1
+        #define RTE_QSPI_MPC      1
+        #define RTE_DDR4_MPC      1
+        #define RTE_VM0_MPC       1
+        #define RTE_VM1_MPC       1
+        #define RTE_SSRAM2_MPC    1
+        #define RTE_SSRAM3_MPC    1
+      </RTE_Components_h>
+      <files>
+        <file category="include" name="Device/Include/"/>
+        <file category="source" name="Device/Source/mpc_sie_drv.c"/>
+        <file category="header" name="Device/Include/mpc_sie_drv.h"/>
+        <file category="header" name="Device/Include/Driver_MPC.h"/>
+        <file category="source" name="Device/Source/Driver_MPC.c"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="PPC" Cversion="1.2.0" condition="SSE-310-MPS3 PPC">
+      <description>Native PPC driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_MAIN0_PPC_CORSTONE310            1
+        #define RTE_MAIN_EXP0_PPC_CORSTONE310        1
+        #define RTE_MAIN_EXP1_PPC_CORSTONE310        1
+        #define RTE_MAIN_EXP2_PPC_CORSTONE310        1
+        #define RTE_MAIN_EXP3_PPC_CORSTONE310        1
+        #define RTE_PERIPH0_PPC_CORSTONE310          1
+        #define RTE_PERIPH1_PPC_CORSTONE310          1
+        #define RTE_PERIPH_EXP0_PPC_CORSTONE310      1
+        #define RTE_PERIPH_EXP1_PPC_CORSTONE310      1
+        #define RTE_PERIPH_EXP2_PPC_CORSTONE310      1
+        #define RTE_PERIPH_EXP3_PPC_CORSTONE310      1
+      </RTE_Components_h>
+      <files>
+        <file category="include" name="Device/Include/"/>
+        <file category="header" name="Device/Include/Driver_PPC.h"/>
+        <file category="source" name="Device/Source/Driver_PPC.c"/>
+        <file category="header" name="Device/Include/Driver_PPC_Common.h"/>
+        <file category="source" name="Device/Source/ppc_corstone310_drv.c"/>
+        <file category="header" name="Device/Include/ppc_corstone310_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="GPIO" Cversion="1.0.1" condition="SSE-310-MPS3 Device">
+      <description>Native GPIO driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_GPIO      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="Device/Source/gpio_cmsdk_drv.c"/>
+        <file category="header" name="Device/Include/gpio_cmsdk_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="SPI" Cversion="1.2.0" condition="SSE-310-MPS3 Device">
+      <description>Native SPI driver for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/spi_pl022_drv.c"/>
+        <file category="header" name="Device/Include/spi_pl022_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="Watchdog" Cversion="1.0.1" condition="SSE-310-MPS3 Device">
+      <description>Native watchdog driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_WATCHDOG      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="Device/Source/syswdog_armv8-m_drv.c"/>
+        <file category="header" name="Device/Include/syswdog_armv8-m_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="MPU" Cversion="1.0.0" condition="SSE-310-MPS3 Device">
+      <description>Native MPU driver for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/mpu_armv8m_drv.c"/>
+        <file category="header" name="Device/Include/mpu_armv8m_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="Timeout" Cversion="1.0.1" condition="SSE-310-MPS3 Systimer Syscounter">
+      <description>Systimer timeout driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_TIMEOUT      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="Device/Source/systimer_armv8-m_timeout.c"/>
+        <file category="header" name="Device/Include/timeout.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="I2C SBCon" Cversion="1.0.0" condition="SSE-310-MPS3 Timeout">
+      <description>Native I2C SBCon driver for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/i2c_sbcon_drv.c"/>
+        <file category="header" name="Device/Include/i2c_sbcon_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="Audio I2S" Cversion="1.0.1" condition="SSE-310-MPS3 Device">
+      <description>Native Audio I2S driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_I2S      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="Device/Source/audio_i2s_mps3_drv.c"/>
+        <file category="header" name="Device/Include/audio_i2s_mps3_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="CLCD" Cversion="1.0.0" condition="SSE-310-MPS3 Device">
+      <description>Native CLCD driver for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/clcd_mps3_drv.c"/>
+        <file category="header" name="Device/Include/clcd_mps3_drv.h"/>
+        <file category="source" name="Device/Source/clcd_mps3_lib.c"/>
+        <file category="header" name="Device/Include/clcd_mps3_lib.h"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="SSE-310 Remap" Cversion="1.0.0" condition="SSE-310-MPS3 DMA350">
+      <description>DMA350 address remap for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/dma350_address_remap.c" version="1.0.0"/>
+      </files>
+    </component>
+
+    <component Cclass="Device" Cgroup="Native Driver" Csub="Flash" Cversion="1.1.0" condition="SSE-310-MPS3 Device">
+      <description>Emulated flash driver for SSE-310</description>
+      <files>
+        <file category="source" name="Device/Source/emulated_flash_drv.c"/>
+        <file category="header" name="Device/Include/emulated_flash_drv.h"/>
+      </files>
+    </component>
+
+    <component Cclass="CMSIS Driver" Cgroup="USART" Cversion="1.1.0" Capiversion="2.2.0" condition="SSE-310-MPS3 USART" maxInstances="5">
+      <description>USART driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_USART%Instance%      1
+      </RTE_Components_h>
+      <files>
+        <file category="header" name="CMSIS_Driver/Driver_USART_Common.h"/>
+        <file category="header" name="CMSIS_Driver/Driver_USART_CMSDK.h"/>
+        <file category="source" name="CMSIS_Driver/Driver_USART.c"/>
+      </files>
+    </component>
+
+    <component Cclass="CMSIS Driver" Cgroup="Flash" Csub="SRAM" Capiversion="1.1.0" Cversion="1.0.0" condition="SSE-310-MPS3 FLASH" maxInstances="1">
+      <description>Emulated Flash Driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_FLASH%Instance%      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="CMSIS_Driver/Driver_Flash.c"/>
+        <file category="header" name="Device/Include/Driver_Flash_Emulated.h"/>
+        <file category="header" name="Device/Include/Driver_Flash_Common.h"/>
+      </files>
+    </component>
+
+    <component Cclass="CMSIS Driver" Cgroup="SPI" Cversion="1.2.0" Capiversion="2.2.0" condition="SSE-310-MPS3 SPI" maxInstances="5">
+      <description>SPI driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_SPI%Instance%      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="CMSIS_Driver/Driver_SPI.c"/>
+        <file category="header" name="CMSIS_Driver/Driver_SPI_Resource.h"/>
+      </files>
+    </component>
+
+    <component Cclass="CMSIS Driver" Cgroup="I2C" Cversion="1.0.1" Capiversion="2.2.0" condition="SSE-310-MPS3 I2C SBCon" maxInstances="4">
+      <description>I2C SBcon driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_I2C%Instance%      1
+      </RTE_Components_h>
+      <files>
+        <file category="source" name="CMSIS_Driver/Driver_I2C.c"/>
+      </files>
+    </component>
+
+    <component Cclass="CMSIS Driver" Cgroup="VIO" Cversion="1.0.0" Capiversion="1.0.0" condition="SSE-310-MPS3 VIO">
+      <description>VIO driver for SSE-310</description>
+      <RTE_Components_h>
+        <!-- the following content goes into file 'RTE_Components.h' -->
+        #define RTE_VIO      1
+      </RTE_Components_h>
+      <files>
+        <file category="header" name="Device/Include/arm_vio.h"/>
+        <file category="source" name="Device/Source/vio_fvp.c"/>
+      </files>
+    </component>
+  </components>
+
+  <boards>
+    <board name="V2M-MPS3-SSE-310" vendor="ARM">
+      <description>ARM Versatile Express Cortex-M Prototyping System Board</description>
+      <book category="overview" name="https://developer.arm.com/tools-and-software/open-source-software/arm-platforms-software/arm-ecosystem-fvps" title="Corstone-310 Ecosystem FVP (web page)"/>
+      <mountedDevice Dfamily="ARM Cortex M85" Dvendor="ARM:82" Dname="SSE-310-MPS3_FVP"/>
+      <compatibleDevice Dfamily="ARM Cortex M85" Dvendor="ARM:82" Dname="SSE-310-MPS3_AN555"/>
+      <feature type="XTAL"      n="25000000"/>
+    </board>
+  </boards>
+
+  <examples>
+    <example name="Blinky" doc="Blinky/Abstract.txt" folder="Examples/Blinky">
+      <description>Blinky example for SSE310 FVP.</description>
+      <board name="V2M-MPS3-SSE-310" vendor="ARM"/>
+      <project>
+        <environment name="uv" load="Blinky.csolution.yml"/>
+        <environment name="code" load="Blinky.csolution.yml"/>
+        <environment name="iar" load="Blinky.csolution.yml"/>
+      </project>
+      <attributes>
+        <category>Getting Started</category>
+      </attributes>
+    </example>
+    <example name="Vio" doc="Vio/Abstract.txt" folder="Examples/Vio">
+      <description>Vio example for SSE310 FVP.</description>
+      <board name="V2M-MPS3-SSE-310" vendor="ARM"/>
+      <project>
+        <environment name="uv" load="Vio.csolution.yml"/>
+        <environment name="code" load="Vio.csolution.yml"/>
+        <environment name="iar" load="Vio.csolution.yml"/>
+      </project>
+      <attributes>
+        <category>Getting Started</category>
+      </attributes>
+    </example>
+  </examples>
+</package>
