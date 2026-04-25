@@ -1,9 +1,0 @@
-scons.args: &scons
-    scons_arg:
-      - '--strict'
-
-# ------ peripheral CI ------
-peripheral.eth:
-    kconfig:
-      - CONFIG_BSP_USING_ETH_H750=y
-
