@@ -70,6 +70,7 @@ void  OS_MsgPoolInit (OS_ERR  *p_err)
     }
 #endif
 
+    /* 启动阶段构建全局 OS_MSG 描述符空闲链表。 */
     p_msg1 = OSCfg_MsgPoolBasePtr;
     p_msg2 = OSCfg_MsgPoolBasePtr;
     p_msg2++;
@@ -125,6 +126,7 @@ OS_MSG_QTY  OS_MsgQFreeAll (OS_MSG_Q  *p_msg_q)
 
     qty = p_msg_q->NbrEntries;                                  /* Get the number of OS_MSGs being freed                */
     if (p_msg_q->NbrEntries > 0u) {
+        /* 以 O(1) 方式将整条队列链回接到全局消息池。 */
         p_msg                   = p_msg_q->InPtr;               /* Point to end of message chain                        */
         p_msg->NextPtr          = OSMsgPool.NextPtr;
         OSMsgPool.NextPtr       = p_msg_q->OutPtr;              /* Point to beginning of message chain                  */
@@ -237,6 +239,7 @@ void  *OS_MsgQGet (OS_MSG_Q     *p_msg_q,
         p_msg_q->NbrEntries--;                                  /* Yes, One less message in the queue                   */
     }
 
+    /* 提取消息载荷后，将已消费描述符归还全局池。 */
     p_msg->NextPtr    = OSMsgPool.NextPtr;                      /* Return message control block to free list            */
     OSMsgPool.NextPtr = p_msg;
     OSMsgPool.NbrFree++;
@@ -304,6 +307,7 @@ void  OS_MsgQPut (OS_MSG_Q     *p_msg_q,
         return;
     }
 
+    /* 本次入队先从全局池分配一个消息描述符。 */
     p_msg = OSMsgPool.NextPtr;                                  /* Remove message control block from free list          */
     OSMsgPool.NextPtr = p_msg->NextPtr;
     OSMsgPool.NbrFree--;
@@ -322,11 +326,13 @@ void  OS_MsgQPut (OS_MSG_Q     *p_msg_q,
         p_msg->NextPtr         = (OS_MSG *)0;
     } else {                                                    /* No                                                   */
         if ((opt & OS_OPT_POST_LIFO) == OS_OPT_POST_FIFO) {     /* Is it FIFO or LIFO?                                  */
+            /* FIFO：尾部追加，保持消息到达顺序。 */
             p_msg_in           = p_msg_q->InPtr;                /* FIFO, add to the head                                */
             p_msg_in->NextPtr  = p_msg;
             p_msg_q->InPtr     = p_msg;
             p_msg->NextPtr     = (OS_MSG *)0;
         } else {
+            /* LIFO：头部压入，最新消息优先被取出。 */
             p_msg->NextPtr     = p_msg_q->OutPtr;               /* LIFO, add to the tail                                */
             p_msg_q->OutPtr    = p_msg;
         }

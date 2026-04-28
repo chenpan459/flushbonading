@@ -115,6 +115,7 @@ void  OSMutexCreate (OS_MUTEX  *p_mutex,
 #if (OS_CFG_TS_EN > 0u)
     p_mutex->TS                =             0u;
 #endif
+    /* 等待该互斥量的任务按优先级挂在 pend 链表中。 */
     OS_PendListInit(&p_mutex->PendList);                        /* Initialize the waiting list                          */
 
 #if (OS_CFG_DBG_EN > 0u)
@@ -254,6 +255,7 @@ OS_OBJ_QTY  OSMutexDel (OS_MUTEX  *p_mutex,
              break;
 
         case OS_OPT_DEL_ALWAYS:                                 /* Always delete the mutex                              */
+             /* 强制唤醒全部等待任务，然后清理所有权与继承状态。 */
 #if (OS_CFG_TS_EN > 0u)
              ts = OS_TS_GET();                                  /* Get timestamp                                        */
 #else
@@ -495,6 +497,7 @@ void  OSMutexPend (OS_MUTEX  *p_mutex,
     }
 
     p_tcb = p_mutex->OwnerTCBPtr;                               /* Point to the TCB of the Mutex owner                  */
+    /* 优先级继承：高优先级任务阻塞时提升 owner 优先级。 */
     if (p_tcb->Prio > OSTCBCurPtr->Prio) {                      /* See if mutex owner has a lower priority than current */
         OS_TaskChangePrio(p_tcb, OSTCBCurPtr->Prio);
         OS_TRACE_MUTEX_TASK_PRIO_INHERIT(p_tcb, p_tcb->Prio);
@@ -838,6 +841,7 @@ void  OSMutexPost (OS_MUTEX  *p_mutex,
         return;
     }
                                                                 /* Yes                                                  */
+    /* 释放后尽可能去继承：重算当前任务所持互斥量上的最高等待优先级。 */
     if (OSTCBCurPtr->Prio != OSTCBCurPtr->BasePrio) {           /* Has owner inherited a priority?                      */
         prio_new = OS_MutexGrpPrioFindHighest(OSTCBCurPtr);     /* Yes, find highest priority pending                   */
         prio_new = (prio_new > OSTCBCurPtr->BasePrio) ? OSTCBCurPtr->BasePrio : prio_new;
@@ -985,6 +989,7 @@ void  OS_MutexDbgListRemove (OS_MUTEX  *p_mutex)
 
 void  OS_MutexGrpAdd (OS_TCB  *p_tcb, OS_MUTEX  *p_mutex)
 {
+    /* 记录任务持有的全部互斥量，供继承/去继承扫描使用。 */
     p_mutex->MutexGrpNextPtr = p_tcb->MutexGrpHeadPtr;      /* The mutex grp is not sorted add to head of list.       */
     p_tcb->MutexGrpHeadPtr   = p_mutex;
 }
@@ -1014,6 +1019,7 @@ void  OS_MutexGrpRemove (OS_TCB  *p_tcb, OS_MUTEX  *p_mutex)
 
     pp_mutex = &p_tcb->MutexGrpHeadPtr;
 
+    /* 从 owner 单链表中线性摘链。 */
     while(*pp_mutex != p_mutex) {
         pp_mutex = &(*pp_mutex)->MutexGrpNextPtr;
     }
@@ -1049,6 +1055,7 @@ OS_PRIO  OS_MutexGrpPrioFindHighest (OS_TCB  *p_tcb)
     highest_prio = (OS_PRIO)(OS_CFG_PRIO_MAX - 1u);
     pp_mutex = &p_tcb->MutexGrpHeadPtr;
 
+    /* 扫描每个已持有互斥量的等待队首，找出最强继承优先级需求。 */
     while(*pp_mutex != (OS_MUTEX *)0) {
         p_head = (*pp_mutex)->PendList.HeadPtr;
         if (p_head != (OS_TCB *)0) {
@@ -1092,6 +1099,7 @@ void  OS_MutexGrpPostAll (OS_TCB  *p_tcb)
 
     p_mutex = p_tcb->MutexGrpHeadPtr;
 
+    /* 任务删除场景使用：释放该任务仍持有的全部互斥量。 */
     while(p_mutex != (OS_MUTEX *)0) {
 
         OS_TRACE_MUTEX_POST(p_mutex);

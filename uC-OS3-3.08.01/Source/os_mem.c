@@ -134,6 +134,7 @@ void  OSMemCreate (OS_MEM       *p_mem,
     }
 #endif
 
+    /* 构建侵入式空闲链表：每个空闲块内保存“下一块”指针。 */
     p_link = (void **)p_addr;                                   /* Create linked list of free memory blocks             */
     p_blk  = (CPU_INT08U *)p_addr;
     loops  = n_blks - 1u;
@@ -161,7 +162,7 @@ void  OSMemCreate (OS_MEM       *p_mem,
     (void)p_name;
 #endif
     p_mem->AddrPtr     = p_addr;                                /* Store start address of memory partition              */
-    p_mem->FreeListPtr = p_addr;                                /* Initialize pointer to pool of free blocks            */
+    p_mem->FreeListPtr = p_addr;                                /* 空闲链表头（分配/回收均为 O(1)）                     */
     p_mem->NbrFree     = n_blks;                                /* Store number of free blocks in MCB                   */
     p_mem->NbrMax      = n_blks;
     p_mem->BlkSize     = blk_size;                              /* Store block size of each memory blocks               */
@@ -243,6 +244,7 @@ void  *OSMemGet (OS_MEM  *p_mem,
        *p_err = OS_ERR_MEM_NO_FREE_BLKS;                        /* No,  Notify caller of empty memory partition         */
         return ((void *)0);                                     /* Return NULL pointer to caller                        */
     }
+    /* 从空闲链表头弹出，保证确定性的 O(1) 分配时延。 */
     p_blk              = p_mem->FreeListPtr;                    /* Yes, point to next free memory block                 */
     p_mem->FreeListPtr = *(void **)p_blk;                       /* Adjust pointer to new free list                      */
     p_mem->NbrFree--;                                           /* One less memory block in this partition              */
@@ -328,6 +330,7 @@ void  OSMemPut (OS_MEM  *p_mem,
        *p_err = OS_ERR_MEM_FULL;
         return;
     }
+    /* 归还块头插回空闲链表，回收复杂度 O(1)。 */
     *(void **)p_blk    = p_mem->FreeListPtr;                    /* Insert released block into free block list           */
     p_mem->FreeListPtr = p_blk;
     p_mem->NbrFree++;                                           /* One more memory block in this partition              */
@@ -355,6 +358,7 @@ void  OSMemPut (OS_MEM  *p_mem,
 #if (OS_CFG_DBG_EN > 0u)
 void  OS_MemDbgListAdd (OS_MEM  *p_mem)
 {
+    /* 插入调试链表头，便于工具遍历内存分区对象。 */
     p_mem->DbgPrevPtr               = (OS_MEM *)0;
     if (OSMemDbgListPtr == (OS_MEM *)0) {
         p_mem->DbgNextPtr           = (OS_MEM *)0;
@@ -384,6 +388,7 @@ void  OS_MemDbgListAdd (OS_MEM  *p_mem)
 
 void  OS_MemInit (OS_ERR  *p_err)
 {
+    /* Reset global debug anchors/counters during kernel initialization. */
 #if (OS_CFG_DBG_EN > 0u)
     OSMemDbgListPtr = (OS_MEM *)0;
     OSMemQty        = 0u;

@@ -36,6 +36,7 @@ const  CPU_CHAR  *os_dbg__c = "$Id: $";
 *                                                     CONSTANTS
 ************************************************************************************************************************
 */
+/* 调试器通过读取这些 const 符号，获知当前内核的编译配置与关键结构尺寸。 */
 
 CPU_INT08U  const  OSDbg_DbgEn                 = OS_CFG_DBG_EN;                /* Debug constants are defined below   */
 
@@ -47,6 +48,7 @@ CPU_INT08U  const  OSDbg_DbgEn                 = OS_CFG_DBG_EN;                /
 *                                                      DEBUG DATA
 ************************************************************************************************************************
 */
+/* 该区导出“功能开关 + 结构体大小 + 关键对象模板”，便于 kernel-aware 调试工具解析内核内存。 */
 
 CPU_INT08U  const  OSDbg_ArgChkEn              = OS_CFG_ARG_CHK_EN;
 CPU_INT08U  const  OSDbg_AppHooksEn            = OS_CFG_APP_HOOKS_EN;
@@ -203,6 +205,7 @@ CPU_INT16U  const  OSDbg_VersionNbr            = OS_VERSION;
 *                                     TOTAL DATA SPACE (i.e. RAM) USED BY uC/OS-III
 ************************************************************************************************************************
 */
+/* 统计内核静态 RAM 占用，帮助评估配置变化带来的内存成本。 */
 
 CPU_INT32U  const  OSDbg_DataSize = sizeof(OSIntNestingCtr)
 
@@ -407,6 +410,7 @@ void  OS_Dbg_Init (void)
     CPU_INT32U const * volatile  p_temp32;
 
 
+    /* 通过 volatile 指针“触碰”调试常量，防止被优化器移除。 */
     p_temp08 = (CPU_INT08U const *)&OSDbg_DbgEn;
 
     p_temp32 = (CPU_INT32U const *)&OSDbg_DataSize;
@@ -515,6 +519,7 @@ void  OS_Dbg_Init (void)
 
     p_temp16 = (CPU_INT16U const *)&OSDbg_VersionNbr;
 
+    /* 保留这些赋值仅用于抑制未使用变量告警。 */
     p_temp08 = p_temp08;                                     /* Prevent compiler warning for not using 'p_temp'        */
     p_temp16 = p_temp16;
     p_temp32 = p_temp32;

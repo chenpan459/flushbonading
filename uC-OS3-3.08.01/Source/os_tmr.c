@@ -107,6 +107,8 @@ void  OSTmrCreate (OS_TMR               *p_tmr,
                    void                 *p_callback_arg,
                    OS_ERR               *p_err)
 {
+    /* 创建仅做“配置与登记”，不会把定时器放入运行链；
+     * 真正计时从 OSTmrStart 开始。 */
 #ifdef OS_SAFETY_CRITICAL
     if (p_err == (OS_ERR *)0) {
         OS_SAFETY_CRITICAL_EXCEPTION();
@@ -183,6 +185,7 @@ void  OSTmrCreate (OS_TMR               *p_tmr,
 #else
     (void)p_name;
 #endif
+    /* API 传入单位是“定时器节拍”，统一折算到内核 tick。 */
     p_tmr->Dly            =  dly    * OSTmrToTicksMult;         /* Convert to Timer Start Delay to ticks                */
     p_tmr->Remain         =  0u;
     p_tmr->Period         =  period * OSTmrToTicksMult;         /* Convert to Timer Period      to ticks                */
@@ -238,6 +241,8 @@ void  OSTmrCreate (OS_TMR               *p_tmr,
 CPU_BOOLEAN  OSTmrDel (OS_TMR  *p_tmr,
                        OS_ERR  *p_err)
 {
+    /* 删除定时器：
+     * 若在运行链上先摘链，再清对象；若已停止/完成则直接清对象。 */
     CPU_BOOLEAN  success;
     OS_TICK      time;
     CPU_SR_ALLOC();
@@ -289,6 +294,7 @@ CPU_BOOLEAN  OSTmrDel (OS_TMR  *p_tmr,
 
     CPU_CRITICAL_ENTER();
     if (OSTCBCurPtr == &OSTmrTaskTCB) {                         /* Callbacks operate on the Tmr Task's tick base.       */
+        /* 在定时器任务上下文中，用它维护的基准时间避免“当前 tick 读取偏差”。 */
         time = OSTmrTaskTickBase;
     } else {
 #if (OS_CFG_DYN_TICK_EN > 0u)
@@ -370,6 +376,7 @@ CPU_BOOLEAN  OSTmrDel (OS_TMR  *p_tmr,
 OS_TICK  OSTmrRemainGet (OS_TMR  *p_tmr,
                          OS_ERR  *p_err)
 {
+    /* 返回剩余时间时需要沿 delta 链累计到目标节点。 */
     OS_TMR   *p_tmr1;
     OS_TICK   remain;
 
@@ -422,7 +429,8 @@ OS_TICK  OSTmrRemainGet (OS_TMR  *p_tmr,
                  }
                  p_tmr1 = p_tmr1->NextPtr;
              }
-             remain /= OSTmrToTicksMult;
+            /* 对外返回“定时器节拍”单位，需从内核 tick 反向换算。 */
+            remain /= OSTmrToTicksMult;
             *p_err   = OS_ERR_NONE;
              break;
 
@@ -512,6 +520,7 @@ void  OSTmrSet (OS_TMR               *p_tmr,
                 void                 *p_callback_arg,
                 OS_ERR               *p_err)
 {
+    /* 运行期改参数：回调立即生效；dly/period 在下一轮重装载时体现。 */
 #ifdef OS_SAFETY_CRITICAL
     if (p_err == (OS_ERR *)0) {
         OS_SAFETY_CRITICAL_EXCEPTION();
@@ -618,6 +627,7 @@ void  OSTmrSet (OS_TMR               *p_tmr,
 CPU_BOOLEAN  OSTmrStart (OS_TMR  *p_tmr,
                          OS_ERR  *p_err)
 {
+    /* 启动/重启都走“先确定 Remain，再按 delta 有序插入链表”。 */
     CPU_BOOLEAN  success;
     OS_TICK      time;
     CPU_SR_ALLOC();
@@ -676,6 +686,7 @@ CPU_BOOLEAN  OSTmrStart (OS_TMR  *p_tmr,
     switch (p_tmr->State) {
         case OS_TMR_STATE_RUNNING:                              /* Restart the timer                                    */
         case OS_TMR_STATE_TIMEOUT:
+             /* 运行中重启：先摘链，再按新的初始超时重新入链。 */
              p_tmr->State = OS_TMR_STATE_RUNNING;
              OS_TmrUnlink(p_tmr, time);                         /* Remove from current position in List                 */
              if (p_tmr->Dly == 0u) {
@@ -690,6 +701,7 @@ CPU_BOOLEAN  OSTmrStart (OS_TMR  *p_tmr,
 
         case OS_TMR_STATE_STOPPED:                              /* Start the timer                                      */
         case OS_TMR_STATE_COMPLETED:
+             /* 停止态/一次性完成态启动：直接入运行链。 */
              p_tmr->State = OS_TMR_STATE_RUNNING;
              if (p_tmr->Dly == 0u) {
                  p_tmr->Remain = p_tmr->Period;
@@ -856,6 +868,8 @@ CPU_BOOLEAN  OSTmrStop (OS_TMR  *p_tmr,
                         void    *p_callback_arg,
                         OS_ERR  *p_err)
 {
+    /* 停止语义可选：
+     * 仅停止；或停止并立刻执行回调（使用原参数/新参数）。 */
     OS_TMR_CALLBACK_PTR  p_fnct;
     CPU_BOOLEAN          success;
     OS_TICK              time;
@@ -917,6 +931,7 @@ CPU_BOOLEAN  OSTmrStop (OS_TMR  *p_tmr,
              p_tmr->State = OS_TMR_STATE_STOPPED;               /* Ensure that any callbacks see the stop state         */
              switch (opt) {
                  case OS_OPT_TMR_CALLBACK:
+                      /* 按创建时参数触发一次回调。 */
                       OS_TmrUnlink(p_tmr, time);                /* Remove from timer list                               */
                       p_fnct = p_tmr->CallbackPtr;              /* Execute callback function ...                        */
                       if (p_fnct != (OS_TMR_CALLBACK_PTR)0) {   /* ... if available                                     */
@@ -927,6 +942,7 @@ CPU_BOOLEAN  OSTmrStop (OS_TMR  *p_tmr,
                       break;
 
                  case OS_OPT_TMR_CALLBACK_ARG:
+                      /* 按本次调用提供的新参数触发一次回调。 */
                       OS_TmrUnlink(p_tmr, time);                /* Remove from timer list                               */
                       p_fnct = p_tmr->CallbackPtr;              /* Execute callback function if available ...           */
                       if (p_fnct != (OS_TMR_CALLBACK_PTR)0) {
@@ -990,6 +1006,7 @@ CPU_BOOLEAN  OSTmrStop (OS_TMR  *p_tmr,
 
 void  OS_TmrClr (OS_TMR  *p_tmr)
 {
+    /* 对象彻底复位为 UNUSED，供后续重新 Create。 */
     p_tmr->State          = OS_TMR_STATE_UNUSED;                /* Clear timer fields                                   */
 #if (OS_OBJ_TYPE_REQ > 0u)
     p_tmr->Type           = OS_OBJ_TYPE_NONE;
@@ -1090,6 +1107,8 @@ void  OS_TmrDbgListRemove (OS_TMR  *p_tmr)
 
 void  OS_TmrInit (OS_ERR  *p_err)
 {
+    /* 定时器子系统初始化：
+     * 全局链表/计数器 -> 互斥锁与条件变量 -> 创建定时器任务。 */
 #if (OS_CFG_DBG_EN > 0u)
     OSTmrQty             =           0u;                        /* Keep track of the number of timers created           */
     OSTmrDbgListPtr      = (OS_TMR *)0;
@@ -1100,6 +1119,7 @@ void  OS_TmrInit (OS_ERR  *p_err)
     OSTmrListEntries     =           0u;
 #endif
                                                                 /* Calculate Timer to Ticks multiplier                  */
+    /* 定时器节拍与系统 tick 的换算系数。 */
     OSTmrToTicksMult = OSCfg_TickRate_Hz / OSCfg_TmrTaskRate_Hz;
 
 #if (OS_CFG_TS_EN > 0u)
@@ -1175,6 +1195,8 @@ void  OS_TmrInit (OS_ERR  *p_err)
 void OS_TmrLink (OS_TMR   *p_tmr,
                  OS_TICK   time)
 {
+    /* 与 task/tick 模块一致，定时器也采用 delta 链：
+     * 每个节点 Remain 保存相对前驱的延时。 */
     OS_TMR   *p_tmr1;
     OS_TMR   *p_tmr2;
     OS_TICK   remain;
@@ -1182,6 +1204,7 @@ void OS_TmrLink (OS_TMR   *p_tmr,
 
 
     if (OSTmrListPtr == (OS_TMR *)0) {                          /* Is the list empty?                                   */
+        /* 空链首插后需唤醒定时器任务重装载等待超时。 */
         p_tmr->NextPtr    = (OS_TMR *)0;                        /* Yes, this is the first entry                         */
         p_tmr->PrevPtr    = (OS_TMR *)0;
         OSTmrListPtr      = p_tmr;
@@ -1205,6 +1228,7 @@ void OS_TmrLink (OS_TMR   *p_tmr,
 
     if ((delta           <     remain) &&
         (p_tmr2->PrevPtr == (OS_TMR *)0)) {                     /* Are we the new head of the list?                     */
+        /* 新头插入：扣减旧头 Remain，并通知定时器任务更新等待。 */
         p_tmr2->Remain    =  remain - delta;
         p_tmr->PrevPtr    = (OS_TMR *)0;
         p_tmr->NextPtr    =  p_tmr2;
@@ -1225,6 +1249,7 @@ void OS_TmrLink (OS_TMR   *p_tmr,
 
     while ((p_tmr2 !=        (OS_TMR *)0) &&                    /* Find the appropriate position in the delta list.     */
            (delta  >= p_tmr2->Remain)) {
+        /* 向后遍历时持续消费 delta，直到命中插入区间。 */
         delta  -= p_tmr2->Remain;                               /* Update our delta as we traverse the list.            */
         p_tmr1  = p_tmr2;
         p_tmr2  = p_tmr2->NextPtr;
@@ -1269,6 +1294,7 @@ void OS_TmrLink (OS_TMR   *p_tmr,
 void  OS_TmrUnlink (OS_TMR   *p_tmr,
                     OS_TICK   time)
 {
+    /* 摘链时把被删节点的 delta 归还给后继，保持链表总时间不变。 */
     OS_TMR   *p_tmr1;
     OS_TMR   *p_tmr2;
     OS_TICK   elapsed;
@@ -1277,6 +1303,7 @@ void  OS_TmrUnlink (OS_TMR   *p_tmr,
     p_tmr1                          = p_tmr->PrevPtr;
     p_tmr2                          = p_tmr->NextPtr;
     if (p_tmr1 == (OS_TMR *)0) {
+        /* 删除头节点时要处理定时器任务等待基准。 */
         if (p_tmr2 == (OS_TMR *)0) {                            /* Remove the ONLY entry in the list?                   */
             OSTmrListPtr            = (OS_TMR *)0;
 #if (OS_CFG_DBG_EN > 0u)
@@ -1290,6 +1317,7 @@ void  OS_TmrUnlink (OS_TMR   *p_tmr,
 #if (OS_CFG_DBG_EN > 0u)
             OSTmrListEntries--;
 #endif
+            /* 先结算从基准到当前已流逝时间，再修正新头及后续节点。 */
             elapsed                 = time - OSTmrTaskTickBase;
             p_tmr2->PrevPtr         = (OS_TMR *)0;
             p_tmr2->Remain         += p_tmr->Remain;            /* Add back the ticks to the delta                      */
@@ -1359,6 +1387,9 @@ void  OS_TmrUnlink (OS_TMR   *p_tmr,
 
 void  OS_TmrTask (void  *p_arg)
 {
+    /* 定时器任务两阶段循环：
+     * 1) 根据 elapsed 递减 delta 链；
+     * 2) 处理头部所有到期定时器（回调、重装载或完成）。 */
     OS_TMR_CALLBACK_PTR   p_fnct;
     OS_TMR               *p_tmr;
     OS_TICK               timeout;
@@ -1407,6 +1438,7 @@ void  OS_TmrTask (void  *p_arg)
         p_tmr = OSTmrListPtr;
         while ((elapsed !=          0u) &&
                (p_tmr   != (OS_TMR *)0)) {
+            /* 第一阶段：消费 elapsed，把到期节点压到链表头部。 */
 
             if (elapsed > p_tmr->Remain) {
                 elapsed           -= p_tmr->Remain;
@@ -1424,6 +1456,7 @@ void  OS_TmrTask (void  *p_arg)
 
         while ((p_tmr         != (OS_TMR *)0) &&
                (p_tmr->Remain ==          0u)) {
+            /* 第二阶段：逐个处理到期节点。 */
             p_tmr->State           = OS_TMR_STATE_TIMEOUT;
                                                                 /* Execute callback function if available               */
             p_fnct                 = p_tmr->CallbackPtr;
@@ -1432,13 +1465,16 @@ void  OS_TmrTask (void  *p_arg)
             }
 
             if (p_tmr->State == OS_TMR_STATE_TIMEOUT) {
+                /* 若回调未改变状态，则执行默认后处理。 */
                 OS_TmrUnlink(p_tmr, OSTmrTaskTickBase);
 
                 if (p_tmr->Opt == OS_OPT_TMR_PERIODIC) {
+                    /* 周期定时器：重装 period 并重新入链。 */
                     p_tmr->State   = OS_TMR_STATE_RUNNING;
                     p_tmr->Remain  = p_tmr->Period;
                     OS_TmrLink(p_tmr, OSTmrTaskTickBase);
                 } else {
+                    /* 单次定时器：置 COMPLETED，等待上层决定是否重启。 */
                     p_tmr->PrevPtr = (OS_TMR *)0;
                     p_tmr->NextPtr = (OS_TMR *)0;
                     p_tmr->Remain  = 0u;
@@ -1479,6 +1515,7 @@ static  void  OS_TmrLock (void)
     OS_ERR  err;
 
 
+    /* 全局定时器链表由互斥锁串行保护。 */
     OSMutexPend(&OSTmrMutex, 0u, OS_OPT_PEND_BLOCKING, (CPU_TS *)0, &err);
 }
 
@@ -1540,6 +1577,8 @@ static  void  OS_TmrCondCreate (void)
 
 static  void  OS_TmrCondWait (OS_TICK  timeout)
 {
+    /* 条件等待实现“释放互斥锁 + 休眠 + 重新持锁”的原子流程，
+     * 让应用任务可并发修改定时器链。 */
     OS_TCB        *p_tcb;
     OS_PEND_LIST  *p_pend_list;
     CPU_TS         ts;
@@ -1628,6 +1667,7 @@ static  void  OS_TmrCondWait (OS_TICK  timeout)
 
 static  void  OS_TmrCondSignal (void)
 {
+    /* 仅在定时器任务确实等待条件变量时才发信号，避免无效唤醒。 */
     OS_PEND_LIST  *p_pend_list;
     CPU_TS         ts;
     CPU_SR_ALLOC();

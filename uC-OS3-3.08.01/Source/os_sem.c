@@ -98,6 +98,7 @@ void  OSSemCreate (OS_SEM      *p_sem,
     }
 #endif
 
+    /* 进入临界区后再写对象元数据，避免并发创建/访问导致状态不一致。 */
     CPU_CRITICAL_ENTER();
 #if (OS_OBJ_TYPE_REQ > 0u)
 #if (OS_CFG_OBJ_CREATED_CHK_EN > 0u)
@@ -109,6 +110,9 @@ void  OSSemCreate (OS_SEM      *p_sem,
 #endif
     p_sem->Type    = OS_OBJ_TYPE_SEM;                           /* Mark the data structure as a semaphore               */
 #endif
+    /* 计数语义：
+     * - 资源型信号量：cnt 通常等于资源数；
+     * - 事件型信号量：cnt 通常初始化为 0，等待 post 后变为可获取。 */
     p_sem->Ctr     = cnt;                                       /* Set semaphore value                                  */
 #if (OS_CFG_TS_EN > 0u)
     p_sem->TS      = 0u;
@@ -118,6 +122,7 @@ void  OSSemCreate (OS_SEM      *p_sem,
 #else
     (void)p_name;
 #endif
+    /* 所有等待该信号量的任务都挂在 PendList 上，按优先级排队。 */
     OS_PendListInit(&p_sem->PendList);                          /* Initialize the waiting list                          */
 
 #if (OS_CFG_DBG_EN > 0u)
@@ -230,11 +235,13 @@ OS_OBJ_QTY  OSSemDel (OS_SEM  *p_sem,
     }
 #endif
 
+    /* 删除语义必须在临界区内完成：检查等待链、摘链、清对象应是原子过程。 */
     CPU_CRITICAL_ENTER();
     p_pend_list = &p_sem->PendList;
     nbr_tasks   = 0u;
     switch (opt) {
         case OS_OPT_DEL_NO_PEND:                                /* Delete semaphore only if no task waiting             */
+             /* 保守删除：只允许在无人等待时删除，避免破坏调用方同步契约。 */
              if (p_pend_list->HeadPtr == (OS_TCB *)0) {
 #if (OS_CFG_DBG_EN > 0u)
                  OS_SemDbgListRemove(p_sem);
@@ -251,6 +258,7 @@ OS_OBJ_QTY  OSSemDel (OS_SEM  *p_sem,
              break;
 
         case OS_OPT_DEL_ALWAYS:                                 /* Always delete the semaphore                          */
+             /* 强制删除：将所有等待任务以“对象被删除”原因唤醒并返回错误。 */
 #if (OS_CFG_TS_EN > 0u)
              ts = OS_TS_GET();                                  /* Get local time stamp so all tasks get the same time  */
 #else
@@ -417,8 +425,13 @@ OS_SEM_CTR  OSSemPend (OS_SEM   *p_sem,
 #endif
 
 
+    /* Pend 主流程：
+     * 1) 若计数>0，直接消耗一个计数并返回（快速路径）；
+     * 2) 若不可用且非阻塞，立即返回 WOULD_BLOCK；
+     * 3) 否则挂入 pend 链并触发调度，等待 post/abort/timeout/del。 */
     CPU_CRITICAL_ENTER();
     if (p_sem->Ctr > 0u) {                                      /* Resource available?                                  */
+        /* 快速路径：当前就能拿到信号量，不发生任务切换。 */
         p_sem->Ctr--;                                           /* Yes, caller may proceed                              */
 #if (OS_CFG_TS_EN > 0u)
         if (p_ts != (CPU_TS *)0) {
@@ -434,6 +447,7 @@ OS_SEM_CTR  OSSemPend (OS_SEM   *p_sem,
     }
 
     if ((opt & OS_OPT_PEND_NON_BLOCKING) != 0u) {               /* Caller wants to block if not available?              */
+        /* 非阻塞模式：资源不可用时立刻返回，不进入等待链。 */
 #if (OS_CFG_TS_EN > 0u)
         if (p_ts != (CPU_TS *)0) {
            *p_ts = 0u;
@@ -460,6 +474,7 @@ OS_SEM_CTR  OSSemPend (OS_SEM   *p_sem,
         }
     }
 
+    /* 阻塞路径：记录等待关系（对象=信号量、等待类型=SEM、可选超时）并让出 CPU。 */
     OS_Pend((OS_PEND_OBJ *)((void *)p_sem),                     /* Block task pending on Semaphore                      */
             OSTCBCurPtr,
             OS_TASK_PEND_ON_SEM,
@@ -469,6 +484,7 @@ OS_SEM_CTR  OSSemPend (OS_SEM   *p_sem,
     OSSched();                                                  /* Find the next highest priority task ready to run     */
 
     CPU_CRITICAL_ENTER();
+    /* 被重新调度回来后，根据 PendStatus 区分唤醒原因。 */
     switch (OSTCBCurPtr->PendStatus) {
         case OS_STATUS_PEND_OK:                                 /* We got the semaphore                                 */
 #if (OS_CFG_TS_EN > 0u)
@@ -616,6 +632,7 @@ OS_OBJ_QTY  OSSemPendAbort (OS_SEM  *p_sem,
     }
 #endif
 
+    /* Abort 流程：把等待任务的 pend 状态改为 ABORT 并转就绪。 */
     CPU_CRITICAL_ENTER();
     p_pend_list = &p_sem->PendList;
     if (p_pend_list->HeadPtr == (OS_TCB *)0) {                  /* Any task waiting on semaphore?                       */
@@ -637,6 +654,7 @@ OS_OBJ_QTY  OSSemPendAbort (OS_SEM  *p_sem,
                      OS_STATUS_PEND_ABORT);
         nbr_tasks++;
         if (opt != OS_OPT_PEND_ABORT_ALL) {                     /* Pend abort all tasks waiting?                        */
+            /* 只中止一个等待者（队首最高优先级）。 */
             break;                                              /* No                                                   */
         }
     }
@@ -750,9 +768,13 @@ OS_SEM_CTR  OSSemPost (OS_SEM  *p_sem,
 #endif
 
     OS_TRACE_SEM_POST(p_sem);
+    /* Post 主流程：
+     * - 无等待者：递增计数（受溢出保护）；
+     * - 有等待者：直接唤醒一个或全部等待任务，不累加计数。 */
     CPU_CRITICAL_ENTER();
     p_pend_list = &p_sem->PendList;
     if (p_pend_list->HeadPtr == (OS_TCB *)0) {                  /* Any task waiting on semaphore?                       */
+        /* 无等待任务时，post 等价于计数 +1。 */
         if (p_sem->Ctr == (OS_SEM_CTR)-1) {
            CPU_CRITICAL_EXIT();
           *p_err = OS_ERR_SEM_OVF;
@@ -770,6 +792,7 @@ OS_SEM_CTR  OSSemPost (OS_SEM  *p_sem,
         return (ctr);
     }
 
+    /* 有等待任务时，post 直接把资源交给等待者（优先级顺序）。 */
     p_tcb = p_pend_list->HeadPtr;
     while (p_tcb != (OS_TCB *)0) {
         p_tcb_next = p_tcb->PendNextPtr;
@@ -779,6 +802,7 @@ OS_SEM_CTR  OSSemPost (OS_SEM  *p_sem,
                 0u,
                 ts);
         if ((opt & OS_OPT_POST_ALL) == 0u) {                     /* Post to all tasks waiting?                           */
+            /* 默认只唤醒一个（队首最高优先级）。 */
             break;                                              /* No                                                   */
         }
         p_tcb = p_tcb_next;
@@ -860,6 +884,8 @@ void  OSSemSet (OS_SEM      *p_sem,
 #endif
 
    *p_err = OS_ERR_NONE;
+    /* Set 仅修改计数值，不直接唤醒任务。
+     * 语义上通常用于“重置事件计数”，而不是替代 post。 */
     CPU_CRITICAL_ENTER();
     if (p_sem->Ctr > 0u) {                                      /* See if semaphore already has a count                 */
         p_sem->Ctr = cnt;                                       /* Yes, set it to the new value specified.              */
@@ -868,6 +894,7 @@ void  OSSemSet (OS_SEM      *p_sem,
         if (p_pend_list->HeadPtr == (OS_TCB *)0) {              /* See if task(s) waiting?                              */
             p_sem->Ctr = cnt;                                   /* No, OK to set the value                              */
         } else {
+           /* 有等待者时拒绝直接改值，防止破坏等待语义。 */
            *p_err      = OS_ERR_TASK_WAITING;
         }
     }
@@ -894,6 +921,7 @@ void  OSSemSet (OS_SEM      *p_sem,
 
 void  OS_SemClr (OS_SEM  *p_sem)
 {
+    /* 删除对象后的统一清理：类型清空、计数清零、时间戳清零、等待链复位。 */
 #if (OS_OBJ_TYPE_REQ > 0u)
     p_sem->Type    = OS_OBJ_TYPE_NONE;                          /* Mark the data structure as a NONE                    */
 #endif
@@ -925,6 +953,7 @@ void  OS_SemClr (OS_SEM  *p_sem)
 #if (OS_CFG_DBG_EN > 0u)
 void  OS_SemDbgListAdd (OS_SEM  *p_sem)
 {
+    /* 头插到调试链表，便于 kernel-aware 调试器遍历系统所有信号量。 */
     p_sem->DbgNamePtr               = (CPU_CHAR *)((void *)" ");
     p_sem->DbgPrevPtr               = (OS_SEM *)0;
     if (OSSemDbgListPtr == (OS_SEM *)0) {
@@ -946,6 +975,7 @@ void  OS_SemDbgListRemove (OS_SEM  *p_sem)
     p_sem_prev = p_sem->DbgPrevPtr;
     p_sem_next = p_sem->DbgNextPtr;
 
+    /* 三种摘链场景：头结点 / 尾结点 / 中间结点。 */
     if (p_sem_prev == (OS_SEM *)0) {
         OSSemDbgListPtr = p_sem_next;
         if (p_sem_next != (OS_SEM *)0) {

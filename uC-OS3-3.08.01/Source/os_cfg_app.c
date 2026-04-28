@@ -34,14 +34,17 @@ const  CPU_CHAR  *os_cfg_app__c = "$Id: $";
 #endif
 
 #if (OS_CFG_TASK_IDLE_EN > 0u)
+/* 以百分比计算空栈水位，用于栈监测阈值。 */
 #define  OS_CFG_IDLE_TASK_STK_LIMIT      ((OS_CFG_IDLE_TASK_STK_SIZE  * OS_CFG_TASK_STK_LIMIT_PCT_EMPTY) / 100u)
 #endif
 
 #if (OS_CFG_STAT_TASK_EN > 0u)
+/* 统计任务的栈监测阈值。 */
 #define  OS_CFG_STAT_TASK_STK_LIMIT      ((OS_CFG_STAT_TASK_STK_SIZE  * OS_CFG_TASK_STK_LIMIT_PCT_EMPTY) / 100u)
 #endif
 
 #if (OS_CFG_TMR_EN > 0u)
+/* 定时器任务的栈监测阈值。 */
 #define  OS_CFG_TMR_TASK_STK_LIMIT       ((OS_CFG_TMR_TASK_STK_SIZE   * OS_CFG_TASK_STK_LIMIT_PCT_EMPTY) / 100u)
 #endif
 
@@ -50,6 +53,7 @@ const  CPU_CHAR  *os_cfg_app__c = "$Id: $";
 *                                                    DATA STORAGE
 ************************************************************************************************************************
 */
+/* 这里定义的是内核使用的静态存储区，是否生成由 OS_CFG_* 宏裁剪。 */
 
 #if (OS_CFG_TASK_IDLE_EN > 0u)
 CPU_STK        OSCfg_IdleTaskStk   [OS_CFG_IDLE_TASK_STK_SIZE];
@@ -76,6 +80,7 @@ CPU_STK        OSCfg_TmrTaskStk    [OS_CFG_TMR_TASK_STK_SIZE];
 *                                                      CONSTANTS
 ************************************************************************************************************************
 */
+/* 将上面的静态存储导出为统一的 OSCfg_* 常量，供内核各模块访问。 */
 
 #if (OS_CFG_TASK_IDLE_EN > 0u)
 CPU_STK      * const  OSCfg_IdleTaskStkBasePtr   = &OSCfg_IdleTaskStk[0];
@@ -160,6 +165,7 @@ CPU_INT32U     const  OSCfg_TmrTaskStkSizeRAM    =             0u;
 *                                         TOTAL SIZE OF APPLICATION CONFIGURATION
 ************************************************************************************************************************
 */
+/* 汇总本文件分配的静态 RAM，用于容量评估与调试。 */
 
 CPU_INT32U     const  OSCfg_DataSizeRAM          = 0u
 
@@ -208,6 +214,7 @@ CPU_INT32U     const  OSCfg_DataSizeRAM          = 0u
 
 void  OSCfg_Init (void)
 {
+    /* 通过 (void) 引用防止编译器优化掉本文件导出的配置常量。 */
     (void)OSCfg_DataSizeRAM;
 
 #if (OS_CFG_TASK_IDLE_EN > 0u)

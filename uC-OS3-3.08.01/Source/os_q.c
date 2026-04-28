@@ -119,6 +119,7 @@ void  OSQCreate (OS_Q        *p_q,
 #else
     (void)p_name;
 #endif
+    /* 队列对象包含两部分内部状态：消息链与任务等待链。 */
     OS_MsgQInit(&p_q->MsgQ,                                     /* Initialize the queue                                 */
                 max_qty);
     OS_PendListInit(&p_q->PendList);                            /* Initialize the waiting list                          */
@@ -252,6 +253,7 @@ OS_OBJ_QTY  OSQDel (OS_Q    *p_q,
              break;
 
         case OS_OPT_DEL_ALWAYS:                                 /* Always delete the message queue                      */
+             /* 以 DEL 状态强制唤醒全部等待任务，然后清理队列对象。 */
 #if (OS_CFG_TS_EN > 0u)
              ts = OS_TS_GET();                                  /* Get local time stamp so all tasks get the same time  */
 #else
@@ -357,6 +359,7 @@ OS_MSG_QTY  OSQFlush (OS_Q    *p_q,
 #endif
 
     CPU_CRITICAL_ENTER();
+    /* Flush 仅回收消息描述符；用户消息载荷内存仍由用户管理。 */
     entries = OS_MsgQFreeAll(&p_q->MsgQ);                       /* Return all OS_MSGs to the OS_MSG pool                */
     CPU_CRITICAL_EXIT();
    *p_err   = OS_ERR_NONE;
@@ -506,6 +509,7 @@ void  *OSQPend (OS_Q         *p_q,
     }
 
     CPU_CRITICAL_ENTER();
+    /* 快速路径：队列有消息时立即取出消费。 */
     p_void = OS_MsgQGet(&p_q->MsgQ,                             /* Any message waiting in the message queue?            */
                         p_msg_size,
                         p_ts,
@@ -533,6 +537,7 @@ void  *OSQPend (OS_Q         *p_q,
         }
     }
 
+    /* 慢速路径：当前无消息，将任务挂入队列 pend 链并阻塞。 */
     OS_Pend((OS_PEND_OBJ *)((void *)p_q),                       /* Block task pending on Message Queue                  */
             OSTCBCurPtr,
             OS_TASK_PEND_ON_Q,
@@ -856,6 +861,7 @@ void  OSQPost (OS_Q         *p_q,
     CPU_CRITICAL_ENTER();
     p_pend_list = &p_q->PendList;
     if (p_pend_list->HeadPtr == (OS_TCB *)0) {                  /* Any task waiting on message queue?                   */
+        /* 无等待者：按 FIFO/LIFO 选项写入队列存储。 */
         if ((opt & OS_OPT_POST_LIFO) == 0u) {                   /* Determine whether we post FIFO or LIFO               */
             post_type = OS_OPT_POST_FIFO;
         } else {
@@ -872,6 +878,7 @@ void  OSQPost (OS_Q         *p_q,
         return;
     }
 
+    /* 有等待者：直接投递给等待任务，而不是先入队。 */
     p_tcb = p_pend_list->HeadPtr;
     while (p_tcb != (OS_TCB *)0) {
         p_tcb_next = p_tcb->PendNextPtr;
@@ -915,6 +922,7 @@ void  OSQPost (OS_Q         *p_q,
 
 void  OS_QClr (OS_Q  *p_q)
 {
+    /* 重置对象元数据，并将全部消息描述符归还全局池。 */
     (void)OS_MsgQFreeAll(&p_q->MsgQ);                           /* Return all OS_MSGs to the free list                  */
 #if (OS_OBJ_TYPE_REQ > 0u)
     p_q->Type    =  OS_OBJ_TYPE_NONE;                           /* Mark the data structure as a NONE                    */
@@ -946,6 +954,7 @@ void  OS_QClr (OS_Q  *p_q)
 #if (OS_CFG_DBG_EN > 0u)
 void  OS_QDbgListAdd (OS_Q  *p_q)
 {
+    /* 插入调试链表头，便于内核感知调试工具查看。 */
     p_q->DbgNamePtr               = (CPU_CHAR *)((void *)" ");
     p_q->DbgPrevPtr               = (OS_Q *)0;
     if (OSQDbgListPtr == (OS_Q *)0) {
@@ -967,6 +976,7 @@ void  OS_QDbgListRemove (OS_Q  *p_q)
     p_q_prev = p_q->DbgPrevPtr;
     p_q_next = p_q->DbgNextPtr;
 
+    /* 从调试链表摘除节点（头/尾/中间三种位置）。 */
     if (p_q_prev == (OS_Q *)0) {
         OSQDbgListPtr = p_q_next;
         if (p_q_next != (OS_Q *)0) {

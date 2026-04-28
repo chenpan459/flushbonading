@@ -114,6 +114,7 @@ void  OSFlagCreate (OS_FLAG_GRP  *p_grp,
 #if (OS_CFG_TS_EN > 0u)
     p_grp->TS      = 0u;
 #endif
+    /* Initialize wait list for tasks pending on this flag group. */
     OS_PendListInit(&p_grp->PendList);
 
 #if (OS_CFG_DBG_EN > 0u)
@@ -245,6 +246,7 @@ OS_OBJ_QTY  OSFlagDel (OS_FLAG_GRP  *p_grp,
              break;
 
         case OS_OPT_DEL_ALWAYS:                                 /* Always delete the event flag group                   */
+             /* 以 DEL 原因强制唤醒全部等待任务，然后重调度。 */
 #if (OS_CFG_TS_EN > 0u)
              ts = OS_TS_GET();                                  /* Get local time stamp so all tasks get the same time  */
 #else
@@ -441,6 +443,7 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *p_grp,
     }
 #endif
 
+    /* CONSUME 表示唤醒后自动消费标志：SET 模式清位，CLR 模式回置位。 */
     if ((opt & OS_OPT_PEND_FLAG_CONSUME) != 0u) {               /* See if we need to consume the flags                  */
         consume = OS_TRUE;
     } else {
@@ -488,7 +491,8 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *p_grp,
                      }
                  }
                                                                 /* Lock the scheduler/re-enable interrupts              */
-                 OS_FlagBlock(p_grp,
+                /* Condition not met: move current task to flag pend list (optionally with timeout). */
+                OS_FlagBlock(p_grp,
                               flags,
                               opt,
                               timeout);
@@ -628,6 +632,7 @@ OS_FLAGS  OSFlagPend (OS_FLAG_GRP  *p_grp,
 
     OS_TRACE_FLAG_PEND_BLOCK(p_grp);
 
+    /* Current task is blocked now; switch to next highest-priority ready task. */
     OSSched();                                                  /* Find next HPT ready to run                           */
 
     CPU_CRITICAL_ENTER();
@@ -821,6 +826,7 @@ OS_OBJ_QTY  OSFlagPendAbort (OS_FLAG_GRP  *p_grp,
     ts        = 0u;
 #endif
 
+    /* 将一个或全部等待任务的挂起结果改为 ABORT 并就绪。 */
     while (p_pend_list->HeadPtr != (OS_TCB *)0) {
         p_tcb = p_pend_list->HeadPtr;
         OS_PendAbort(p_tcb,
@@ -833,6 +839,7 @@ OS_OBJ_QTY  OSFlagPendAbort (OS_FLAG_GRP  *p_grp,
     }
     CPU_CRITICAL_EXIT();
 
+    /* Allow caller to suppress immediate scheduling for batched operations. */
     if ((opt & OS_OPT_POST_NO_SCHED) == 0u) {
         OSSched();                                              /* Run the scheduler                                    */
     }
@@ -889,6 +896,7 @@ OS_FLAGS  OSFlagPendGetFlagsRdy (OS_ERR  *p_err)
     }
 #endif
 
+    /* 返回当前 TCB 中由 Pend/Post 就绪路径保存的标志快照。 */
     CPU_CRITICAL_ENTER();
     flags = OSTCBCurPtr->FlagsRdy;
     CPU_CRITICAL_EXIT();
@@ -1001,12 +1009,14 @@ OS_FLAGS  OSFlagPost (OS_FLAG_GRP  *p_grp,
     switch (opt) {
         case OS_OPT_POST_FLAG_SET:
         case OS_OPT_POST_FLAG_SET | OS_OPT_POST_NO_SCHED:
+             /* SET 模式：置位指定标志。 */
              CPU_CRITICAL_ENTER();
              p_grp->Flags |=  flags;                            /* Set   the flags specified in the group               */
              break;
 
         case OS_OPT_POST_FLAG_CLR:
         case OS_OPT_POST_FLAG_CLR | OS_OPT_POST_NO_SCHED:
+             /* CLR 模式：清除指定标志。 */
              CPU_CRITICAL_ENTER();
              p_grp->Flags &= ~flags;                            /* Clear the flags specified in the group               */
              break;
@@ -1027,6 +1037,7 @@ OS_FLAGS  OSFlagPost (OS_FLAG_GRP  *p_grp,
         return (p_grp->Flags);
     }
 
+    /* 更新标志位后重新扫描等待链，唤醒条件已满足的任务。 */
     p_tcb = p_pend_list->HeadPtr;
     while (p_tcb != (OS_TCB *)0) {                              /* Go through all tasks waiting on event flag(s)        */
         p_tcb_next = p_tcb->PendNextPtr;
@@ -1132,6 +1143,7 @@ void  OS_FlagBlock (OS_FLAG_GRP  *p_grp,
                     OS_OPT        opt,
                     OS_TICK       timeout)
 {
+    /* Record each task's wait mask/mode in its TCB before generic pend processing. */
     OSTCBCurPtr->FlagsPend = flags;                             /* Save the flags that we need to wait for              */
     OSTCBCurPtr->FlagsOpt  = opt;                               /* Save the type of wait we are doing                   */
     OSTCBCurPtr->FlagsRdy  = 0u;
@@ -1164,6 +1176,7 @@ void  OS_FlagClr (OS_FLAG_GRP  *p_grp)
     OS_PEND_LIST  *p_pend_list;
 
 
+    /* 重置对象元数据，避免已删除标志组被误用。 */
 #if (OS_OBJ_TYPE_REQ > 0u)
     p_grp->Type             = OS_OBJ_TYPE_NONE;
 #endif
@@ -1194,6 +1207,7 @@ void  OS_FlagClr (OS_FLAG_GRP  *p_grp)
 #if (OS_CFG_DBG_EN > 0u)
 void  OS_FlagDbgListAdd (OS_FLAG_GRP  *p_grp)
 {
+    /* 插入调试链表头，便于内核感知调试工具查看。 */
     p_grp->DbgNamePtr                = (CPU_CHAR *)((void *)" ");
     p_grp->DbgPrevPtr                = (OS_FLAG_GRP *)0;
     if (OSFlagDbgListPtr == (OS_FLAG_GRP *)0) {
@@ -1215,6 +1229,7 @@ void  OS_FlagDbgListRemove (OS_FLAG_GRP  *p_grp)
     p_grp_prev = p_grp->DbgPrevPtr;
     p_grp_next = p_grp->DbgNextPtr;
 
+    /* Unlink node from debug list, handling head/tail/middle cases. */
     if (p_grp_prev == (OS_FLAG_GRP *)0) {
         OSFlagDbgListPtr = p_grp_next;
         if (p_grp_next != (OS_FLAG_GRP *)0) {
@@ -1270,6 +1285,7 @@ void   OS_FlagTaskRdy (OS_TCB    *p_tcb,
 #if (OS_CFG_TS_EN > 0u)
     p_tcb->TS         = ts;
 #endif
+    /* Normalize task state from pending variants back to ready/suspended forms. */
     switch (p_tcb->TaskState) {
         case OS_TASK_STATE_PEND:
         case OS_TASK_STATE_PEND_TIMEOUT:
@@ -1295,6 +1311,7 @@ void   OS_FlagTaskRdy (OS_TCB    *p_tcb,
                                                                 /* Default case.                                        */
              break;
     }
+    /* 任务不再等待该对象：从 pend 链表摘除。 */
     OS_PendListRemove(p_tcb);
 }
 #endif

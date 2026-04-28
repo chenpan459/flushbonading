@@ -63,6 +63,8 @@ void  OSTaskChangePrio (OS_TCB   *p_tcb,
                         OS_PRIO   prio_new,
                         OS_ERR   *p_err)
 {
+    /* 对外改优先级接口：
+     * 先做上下文与参数检查，再调用内核内部 OS_TaskChangePrio 实施迁移。 */
 #if (OS_CFG_MUTEX_EN > 0u)
     OS_PRIO  prio_high;
 #endif
@@ -234,6 +236,8 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
                     OS_OPT         opt,
                     OS_ERR        *p_err)
 {
+    /* 任务创建总流程：
+     * 参数校验 -> TCB初始清零 -> 栈初始化 -> 属性填充 -> 入就绪队列 -> 视情况调度。 */
     CPU_STK_SIZE   i;
 #if (OS_CFG_TASK_REG_TBL_SIZE > 0u)
     OS_REG_ID      reg_nbr;
@@ -318,6 +322,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
 #endif
     }
 
+    /* 先把 TCB 统一初始化，避免旧内容污染新任务状态。 */
     OS_TaskInitTCB(p_tcb);                                      /* Initialize the TCB to default values                 */
 
    *p_err = OS_ERR_NONE;
@@ -339,6 +344,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
     p_stk_limit = p_stk_base + (stk_size - 1u) - stk_limit;
 #endif
 
+    /* 由端口层生成任务首帧上下文，确保首次切换可直接执行任务入口。 */
     p_sp = OSTaskStkInit(p_task,
                          p_arg,
                          p_stk_base,
@@ -429,6 +435,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
     OS_TLS_TaskCreate(p_tcb);                                   /* Call TLS hook                                        */
 #endif
                                                                 /* -------------- ADD TASK TO READY LIST -------------- */
+    /* 创建完成后将任务加入“可调度集合”（位图+就绪链表）。 */
     CPU_CRITICAL_ENTER();
     OS_PrioInsert(p_tcb->Prio);
     OS_RdyListInsertTail(p_tcb);
@@ -440,6 +447,7 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
     OSTaskQty++;                                                /* Increment the #tasks counter                         */
 
     if (OSRunning != OS_STATE_OS_RUNNING) {                     /* Return if multitasking has not started               */
+        /* OSStart 前仅登记任务，不发生立即切换。 */
         CPU_CRITICAL_EXIT();
         return;
     }
@@ -483,6 +491,8 @@ void  OSTaskCreate (OS_TCB        *p_tcb,
 void  OSTaskDel (OS_TCB  *p_tcb,
                  OS_ERR  *p_err)
 {
+    /* 删除任务属于“跨子系统清理”：
+     * 需要从就绪/延时/等待链摘除，处理互斥量继承回退，并回收任务私有消息。 */
 #if (OS_CFG_MUTEX_EN > 0u)
     OS_TCB   *p_tcb_owner;
     OS_PRIO   prio_new;
@@ -551,6 +561,7 @@ void  OSTaskDel (OS_TCB  *p_tcb,
         case OS_TASK_STATE_PEND_SUSPENDED:
         case OS_TASK_STATE_PEND_TIMEOUT:
         case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+             /* 等待态任务删除时，先根据等待对象类型移除 pend 关系。 */
              switch (p_tcb->PendOn) {                           /* See what we are pending on                           */
                  case OS_TASK_PEND_ON_NOTHING:
                  case OS_TASK_PEND_ON_TASK_Q:                   /* There is no wait list for these two                  */
@@ -565,6 +576,7 @@ void  OSTaskDel (OS_TCB  *p_tcb,
 
 #if (OS_CFG_MUTEX_EN > 0u)
                  case OS_TASK_PEND_ON_MUTEX:
+                      /* 删除“等待互斥量”的任务可能影响 owner 去继承优先级。 */
                       p_tcb_owner = ((OS_MUTEX *)((void *)p_tcb->PendObjPtr))->OwnerTCBPtr;
                       prio_new = p_tcb_owner->Prio;
                       OS_PendListRemove(p_tcb);
@@ -602,11 +614,13 @@ void  OSTaskDel (OS_TCB  *p_tcb,
 
 #if (OS_CFG_MUTEX_EN > 0u)
     if(p_tcb->MutexGrpHeadPtr != (OS_MUTEX *)0) {
+        /* 若任务仍持有互斥量，必须批量释放，避免资源永久占用。 */
         OS_MutexGrpPostAll(p_tcb);
     }
 #endif
 
 #if (OS_CFG_TASK_Q_EN > 0u)
+    /* 归还任务私有消息队列中的 OS_MSG 描述符。 */
     (void)OS_MsgQFreeAll(&p_tcb->MsgQ);                         /* Free task's message queue messages                   */
 #endif
 
@@ -691,12 +705,14 @@ OS_MSG_QTY  OSTaskQFlush (OS_TCB  *p_tcb,
 #endif
 
     if (p_tcb == (OS_TCB *)0) {                                 /* Flush message queue of calling task?                 */
+        /* 传 NULL 表示操作当前任务。 */
         CPU_CRITICAL_ENTER();
         p_tcb = OSTCBCurPtr;
         CPU_CRITICAL_EXIT();
     }
 
     CPU_CRITICAL_ENTER();
+    /* Flush 仅回收消息描述符，消息载荷内存生命周期由应用层管理。 */
     entries = OS_MsgQFreeAll(&p_tcb->MsgQ);                     /* Return all OS_MSGs to the OS_MSG pool                */
     CPU_CRITICAL_EXIT();
    *p_err   = OS_ERR_NONE;
@@ -757,6 +773,8 @@ void  *OSTaskQPend (OS_TICK       timeout,
                     CPU_TS       *p_ts,
                     OS_ERR       *p_err)
 {
+    /* 任务私有消息队列等待：
+     * 先尝试直接取消息，失败后按阻塞策略挂起等待。 */
     OS_MSG_Q  *p_msg_q;
     void      *p_void;
     CPU_SR_ALLOC();
@@ -820,6 +838,7 @@ void  *OSTaskQPend (OS_TICK       timeout,
 
     CPU_CRITICAL_ENTER();
     p_msg_q = &OSTCBCurPtr->MsgQ;                               /* Any message waiting in the message queue?            */
+    /* 快速路径：队列非空时立即取出并返回。 */
     p_void  = OS_MsgQGet(p_msg_q,
                          p_msg_size,
                          p_ts,
@@ -857,6 +876,7 @@ void  *OSTaskQPend (OS_TICK       timeout,
         }
     }
 
+    /* 慢速路径：无消息时进入 PEND_ON_TASK_Q，等待 Post/Abort/Timeout。 */
     OS_Pend((OS_PEND_OBJ *)0,                                   /* Block task pending on Message                        */
              OSTCBCurPtr,
              OS_TASK_PEND_ON_TASK_Q,
@@ -1070,6 +1090,9 @@ void  OSTaskQPost (OS_TCB       *p_tcb,
                    OS_OPT        opt,
                    OS_ERR       *p_err)
 {
+    /* 向任务投递消息：
+     * - 若目标正等待 task queue，则直接唤醒并“直达交付”；
+     * - 否则入目标任务私有消息队列。 */
     CPU_TS  ts;
     CPU_SR_ALLOC();
 
@@ -1516,6 +1539,9 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
                            CPU_TS   *p_ts,
                            OS_ERR   *p_err)
 {
+    /* 任务私有信号量等待：
+     * 若 SemCtr>0 直接消费；
+     * 否则按阻塞/非阻塞策略进入等待并在唤醒后按 PendStatus 返回。 */
     OS_SEM_CTR    ctr;
     CPU_SR_ALLOC();
 
@@ -1575,6 +1601,7 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
 
     CPU_CRITICAL_ENTER();
     if (OSTCBCurPtr->SemCtr > 0u) {                             /* See if task already been signaled                    */
+        /* 快速路径：已有未消费信号，不需要阻塞。 */
         OSTCBCurPtr->SemCtr--;
         ctr = OSTCBCurPtr->SemCtr;
 #if (OS_CFG_TS_EN > 0u)
@@ -1623,6 +1650,7 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
         }
     }
 
+    /* 慢速路径：无信号则把当前任务挂到 task sem 等待态。 */
     OS_Pend((OS_PEND_OBJ *)0,                                   /* Block task pending on Signal                         */
              OSTCBCurPtr,
              OS_TASK_PEND_ON_TASK_SEM,
@@ -1632,6 +1660,7 @@ OS_SEM_CTR  OSTaskSemPend (OS_TICK   timeout,
     OSSched();                                                  /* Find next highest priority task ready to run         */
 
     CPU_CRITICAL_ENTER();
+    /* 唤醒后依据 PendStatus 区分：正常、中止、超时。 */
     switch (OSTCBCurPtr->PendStatus) {                          /* See if we timed-out or aborted                       */
         case OS_STATUS_PEND_OK:
 #if (OS_CFG_TS_EN > 0u)
@@ -1761,6 +1790,7 @@ CPU_BOOLEAN  OSTaskSemPendAbort (OS_TCB  *p_tcb,
     CPU_CRITICAL_ENTER();
     if ((p_tcb == (OS_TCB *)0) ||                               /* Pend abort self?                                     */
         (p_tcb == OSTCBCurPtr)) {
+        /* 当前运行任务不可能处于 pend 态，因此不允许“中止自己等待”。 */
         CPU_CRITICAL_EXIT();                                    /* ... doesn't make sense!                              */
        *p_err = OS_ERR_PEND_ABORT_SELF;
         return (OS_FALSE);
@@ -1825,6 +1855,9 @@ OS_SEM_CTR  OSTaskSemPost (OS_TCB  *p_tcb,
                            OS_OPT   opt,
                            OS_ERR  *p_err)
 {
+    /* 向目标任务发送 task sem：
+     * - 目标正在等待时直接唤醒；
+     * - 否则累加其 SemCtr，供后续 Pend 消费。 */
     OS_SEM_CTR  ctr;
     CPU_TS      ts;
     CPU_SR_ALLOC();
@@ -2034,6 +2067,7 @@ void  OSTaskStkChk (OS_TCB        *p_tcb,
                     CPU_STK_SIZE  *p_used,
                     OS_ERR        *p_err)
 {
+    /* 通过扫描填充值估算栈使用水位，用于优化栈大小配置。 */
     CPU_STK_SIZE  free_stk;
     CPU_STK_SIZE  stk_size;
     CPU_STK      *p_stk;
@@ -2197,6 +2231,7 @@ CPU_BOOLEAN  OSTaskStkRedzoneChk (OS_TCB  *p_tcb)
 void   OSTaskSuspend (OS_TCB  *p_tcb,
                       OS_ERR  *p_err)
 {
+    /* 挂起语义：任务若在就绪态则移出运行集合；若已阻塞则转为“阻塞+挂起”复合态。 */
     CPU_SR_ALLOC();
 
 
@@ -2329,6 +2364,9 @@ void  OSTaskTimeQuantaSet (OS_TCB   *p_tcb,
                            OS_TICK   time_quanta,
                            OS_ERR   *p_err)
 {
+    /* 设置任务时间片：
+     * time_quanta=0 使用系统默认时间片；
+     * >0 使用任务自定义时间片。 */
     CPU_SR_ALLOC();
 
 
@@ -2444,6 +2482,7 @@ void  OS_TaskDbgListRemove (OS_TCB  *p_tcb)
 
 void  OS_TaskInit (OS_ERR  *p_err)
 {
+    /* 任务子系统全局初始化：计数器、链表头和统计字段归零。 */
 #if (OS_CFG_DBG_EN > 0u)
     OSTaskDbgListPtr = (OS_TCB *)0;
 #endif
@@ -2474,6 +2513,7 @@ void  OS_TaskInit (OS_ERR  *p_err)
 
 void  OS_TaskInitTCB (OS_TCB  *p_tcb)
 {
+    /* 将 TCB 复位为标准初始态，供创建/删除后复用。 */
 #if (OS_CFG_TASK_REG_TBL_SIZE > 0u)
     OS_REG_ID   reg_id;
 #endif
@@ -2638,6 +2678,7 @@ void  OS_TaskReturn (void)
 
 
 
+    /* 任务函数意外 return 视为异常路径：先执行钩子，再尝试自删除。 */
     OSTaskReturnHook(OSTCBCurPtr);                              /* Call hook to let user decide on what to do           */
 #if (OS_CFG_TASK_DEL_EN > 0u)
     OSTaskDel((OS_TCB *)0,                                      /* Delete task if it accidentally returns!              */
@@ -2719,6 +2760,7 @@ CPU_BOOLEAN   OS_TaskStkRedzoneChk (CPU_STK       *p_base,
 void  OS_TaskStkRedzoneInit (CPU_STK       *p_base,
                              CPU_STK_SIZE   stk_size)
 {
+    /* 在栈边界写入哨兵值，运行期可快速检测越界覆盖。 */
     CPU_STK_SIZE   i;
 
 
@@ -2760,6 +2802,9 @@ void  OS_TaskStkRedzoneInit (CPU_STK       *p_base,
 void  OS_TaskChangePrio(OS_TCB  *p_tcb,
                         OS_PRIO  prio_new)
 {
+    /* 内核级改优先级：
+     * 更新任务所在队列位置；
+     * 若涉及互斥量等待，联动 owner 的继承/去继承调整。 */
     OS_TCB  *p_tcb_owner;
 #if (OS_CFG_MUTEX_EN > 0u)
     OS_PRIO  prio_cur;

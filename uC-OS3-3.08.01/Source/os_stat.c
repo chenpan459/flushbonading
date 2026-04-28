@@ -71,6 +71,7 @@ void  OSStatReset (OS_ERR  *p_err)
     }
 #endif
 
+    /* 先重置全局统计峰值，再按对象链表逐个清零局部统计项。 */
     CPU_CRITICAL_ENTER();
 #if (OS_CFG_STAT_TASK_EN > 0u)
     OSStatTaskCPUUsageMax = 0u;
@@ -112,6 +113,7 @@ void  OSStatReset (OS_ERR  *p_err)
     p_tcb = OSTaskDbgListPtr;
     CPU_CRITICAL_EXIT();
     while (p_tcb != (OS_TCB *)0) {                              /* Reset per-Task statistics                            */
+        /* 逐任务清理运行画像，避免历史峰值影响后续观测。 */
         CPU_CRITICAL_ENTER();
 
 #ifdef CPU_CFG_INT_DIS_MEAS_EN
@@ -211,6 +213,7 @@ void  OSStatTaskCPUUsageInit (OS_ERR  *p_err)
     }
 #endif
 
+/* 为了获得“空载基线”，初始化阶段可短暂暂停定时器任务，降低干扰。 */
 #if ((OS_CFG_TMR_EN > 0u) && (OS_CFG_TASK_SUSPEND_EN > 0u))
     OSTaskSuspend(&OSTmrTaskTCB, &err);
     if (err != OS_ERR_NONE) {
@@ -219,6 +222,7 @@ void  OSStatTaskCPUUsageInit (OS_ERR  *p_err)
     }
 #endif
 
+    /* 与系统 Tick 同步，避免在非整拍点采样导致基线误差。 */
     OSTimeDly(2u,                                               /* Synchronize with clock tick                          */
               (OS_OPT  )OS_OPT_TIME_DLY,
               (OS_ERR *)&err);
@@ -238,6 +242,7 @@ void  OSStatTaskCPUUsageInit (OS_ERR  *p_err)
         dly =  (OSCfg_TickRate_Hz / 10u);
     }
 
+    /* 在近空载窗口内统计空闲计数最大值，作为后续 CPU 使用率分母。 */
     OSTimeDly(dly,                                              /* Determine MAX. idle counter value                    */
               OS_OPT_TIME_DLY,
               &err);
@@ -256,6 +261,7 @@ void  OSStatTaskCPUUsageInit (OS_ERR  *p_err)
 #endif
 
     OSStatTaskCtrMax  = OSStatTaskCtr;                          /* Store maximum idle counter count                     */
+    /* 标记统计任务可进入正常采样循环。 */
     OSStatTaskRdy     = OS_STATE_RDY;
     CPU_CRITICAL_EXIT();
    *p_err             = OS_ERR_NONE;
@@ -318,6 +324,7 @@ void  OS_StatTask (void  *p_arg)
 
     (void)p_arg;                                                /* Prevent compiler warning for not using 'p_arg'       */
 
+    /* 等待 CPUUsageInit 完成基线标定后，再进入正式统计。 */
     while (OSStatTaskRdy != OS_TRUE) {
         OSTimeDly(2u * OSCfg_StatTaskRate_Hz,                   /* Wait until statistic task is ready                   */
                   OS_OPT_TIME_DLY,
@@ -333,6 +340,7 @@ void  OS_StatTask (void  *p_arg)
         dly =  (OSCfg_TickRate_Hz / 10u);
     }
 
+    /* 周期性统计主循环：总体 CPU -> 各任务 CPU -> 栈使用 -> 可选复位。 */
     for (;;) {
 #if (OS_CFG_TS_EN > 0u)
         ts_start        = OS_TS_GET();
@@ -342,11 +350,13 @@ void  OS_StatTask (void  *p_arg)
 #endif
 
         CPU_CRITICAL_ENTER();                                   /* ---------------- OVERALL CPU USAGE ----------------- */
+        /* OSStatTaskCtr 由 Idle 路径累计，值越大代表 CPU 越空闲。 */
         OSStatTaskCtrRun   = OSStatTaskCtr;                     /* Obtain the of the stat counter for the past .1 second*/
         OSStatTaskCtr      = 0u;                                /* Reset the stat counter for the next .1 second        */
         CPU_CRITICAL_EXIT();
 
         if (OSStatTaskCtrMax > OSStatTaskCtrRun) {              /* Compute CPU Usage with best resolution               */
+            /* 通过分段缩放避免大数乘除溢出，同时尽量保持精度。 */
             if (OSStatTaskCtrMax < 400000u) {                   /* 1 to       400,000                                   */
                 ctr_mult = 10000u;
                 ctr_div  =     1u;
@@ -364,6 +374,7 @@ void  OS_StatTask (void  *p_arg)
                 ctr_div  = 10000u;
             }
             ctr_max            = OSStatTaskCtrMax / ctr_div;
+            /* 10000 表示 100.00%（定点百分比，单位 0.01%）。 */
             OSStatTaskCPUUsage = (OS_CPU_USAGE)((OS_TICK)10000u - ((ctr_mult * OSStatTaskCtrRun) / ctr_max));
             if (OSStatTaskCPUUsageMax < OSStatTaskCPUUsage) {
                 OSStatTaskCPUUsageMax = OSStatTaskCPUUsage;
@@ -372,6 +383,7 @@ void  OS_StatTask (void  *p_arg)
             OSStatTaskCPUUsage = 0u;
         }
 
+        /* 用户可在钩子中追加平台统计项。 */
         OSStatTaskHook();                                       /* Invoke user definable hook                           */
 
 
@@ -383,6 +395,7 @@ void  OS_StatTask (void  *p_arg)
         p_tcb = OSTaskDbgListPtr;
         CPU_CRITICAL_EXIT();
         while (p_tcb != (OS_TCB *)0) {                          /* ---------------- TOTAL CYCLES COUNT ---------------- */
+            /* 汇总每个任务在本周期内的执行周期数。 */
             CPU_CRITICAL_ENTER();
             p_tcb->CyclesTotalPrev = p_tcb->CyclesTotal;        /* Save accumulated # cycles into a temp variable       */
             p_tcb->CyclesTotal     = 0u;                        /* Reset total cycles for task for next run             */
@@ -427,6 +440,7 @@ void  OS_StatTask (void  *p_arg)
         CPU_CRITICAL_EXIT();
         while (p_tcb != (OS_TCB *)0) {
 #if (OS_CFG_TASK_PROFILE_EN > 0u)                               /* Compute execution time of each task                  */
+            /* 将每任务周期数换算为 0.01% 量纲的 CPUUsage。 */
             usage = (OS_CPU_USAGE)(cycles_mult * p_tcb->CyclesTotalPrev / cycles_max);
             if (usage > 10000u) {
                 usage = 10000u;
@@ -438,6 +452,7 @@ void  OS_StatTask (void  *p_arg)
 #endif
 
 #if (OS_CFG_STAT_TASK_STK_CHK_EN > 0u)
+            /* 仅统计活跃任务栈水位，便于后续调小栈节省 RAM。 */
             OSTaskStkChk( p_tcb,                                /* Compute stack usage of active tasks only             */
                          &p_tcb->StkFree,
                          &p_tcb->StkUsed,
@@ -482,6 +497,7 @@ void  OS_StatTask (void  *p_arg)
         OSISRStkUsed = OSCfg_ISRStkSize - free_stk;
 #endif
 
+        /* 支持运行时触发统计清零（通常由应用层置位）。 */
         if (OSStatResetFlag == OS_TRUE) {                       /* Check if need to reset statistics                    */
             OSStatResetFlag  = OS_FALSE;
             OSStatReset(&err);
@@ -494,6 +510,7 @@ void  OS_StatTask (void  *p_arg)
         }
 #endif
 
+        /* 按配置统计频率休眠，进入下一个采样周期。 */
         OSTimeDly(dly,
                   OS_OPT_TIME_DLY,
                   &err);
@@ -523,6 +540,7 @@ void  OS_StatTask (void  *p_arg)
 
 void  OS_StatTaskInit (OS_ERR  *p_err)
 {
+    /* 初始化统计任务状态机与计数器，默认未就绪，待 CPUUsageInit 标定后启用。 */
     OSStatTaskCtr    = 0u;
     OSStatTaskCtrRun = 0u;
     OSStatTaskCtrMax = 0u;

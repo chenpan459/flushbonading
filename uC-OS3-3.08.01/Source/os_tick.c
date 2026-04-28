@@ -61,6 +61,7 @@ void  OS_TickInit (OS_ERR  *p_err)
 {
     *p_err                = OS_ERR_NONE;
 
+    /* Tick 子系统上电初始化：清零全局 tick 计数与延时链表头。 */
     OSTickCtr             = 0u;                               /* Clear the tick counter                               */
 
 #if (OS_CFG_DYN_TICK_EN > 0u)
@@ -101,12 +102,14 @@ void  OS_TickUpdate (OS_TICK  ticks)
 
     CPU_CRITICAL_ENTER();
 
+    /* 每次时基推进都先累计全局 Tick，再统一处理延时/超时链表。 */
     OSTickCtr += ticks;                                         /* Keep track of the number of ticks                    */
 
     OS_TRACE_TICK_INCREMENT(OSTickCtr);
 
 #if (OS_CFG_TS_EN > 0u)
     ts_start   = OS_TS_GET();
+    /* 根据经过的 ticks 批量更新 delta 链并唤醒到期任务。 */
     OS_TickListUpdate(ticks);
     OSTickTime = OS_TS_GET() - ts_start;
     if (OSTickTimeMax < OSTickTime) {
@@ -118,6 +121,7 @@ void  OS_TickUpdate (OS_TICK  ticks)
 
 #if (OS_CFG_DYN_TICK_EN > 0u)
     if (OSTickList.TCB_Ptr != (OS_TCB *)0) {
+        /* 动态 Tick 模式下，下次中断仅需对齐到当前链表头剩余时间。 */
         OSTickCtrStep = OSTickList.TCB_Ptr->TickRemain;
     } else {
         OSTickCtrStep = 0u;
@@ -166,9 +170,11 @@ CPU_BOOLEAN  OS_TickListInsert (OS_TCB   *p_tcb,
     OS_TICK        remain;
 
 
+    /* 统一换算到“绝对到期点 - 当前时间”的剩余 Tick。 */
     delta = (time + tick_base) - (OSTickCtr + elapsed);         /* How many ticks until our delay expires?              */
 
     if (delta == 0u) {
+        /* 有效延时为 0：不入链，交由上层返回 ZERO_DLY。 */
         p_tcb->TickRemain = 0u;
         return (OS_FALSE);
     }
@@ -177,6 +183,7 @@ CPU_BOOLEAN  OS_TickListInsert (OS_TCB   *p_tcb,
 
     p_list = &OSTickList;
     if (p_list->TCB_Ptr == (OS_TCB *)0) {                       /* Is the list empty?                                   */
+        /* 空链首插：当前任务成为头结点，TickRemain 即完整 delta。 */
         p_tcb->TickRemain   = delta;                            /* Yes, Store time in TCB                               */
         p_tcb->TickNextPtr  = (OS_TCB *)0;
         p_tcb->TickPrevPtr  = (OS_TCB *)0;
@@ -206,6 +213,7 @@ CPU_BOOLEAN  OS_TickListInsert (OS_TCB   *p_tcb,
 
     if ((delta               <   remain) &&                     /* If our entry is the new head of the tick list    ... */
         (p_tcb2->TickPrevPtr == (OS_TCB *)0)) {
+        /* 新任务早于当前头节点到期：自身做新头，并扣减旧头的相对 delta。 */
         p_tcb->TickRemain    =  delta;                          /* ... the delta is equivalent to the full delay    ... */
         p_tcb2->TickRemain   =  remain - delta;                 /* ... the previous head's delta is now relative to it. */
 
@@ -233,12 +241,14 @@ CPU_BOOLEAN  OS_TickListInsert (OS_TCB   *p_tcb,
 
     while ((p_tcb2 !=        (OS_TCB *)0) &&                    /* Find the appropriate position in the delta list.     */
            (delta  >= p_tcb2->TickRemain)) {
+        /* 沿 delta 链向后推进，直到找到应插入区间。 */
         delta  -= p_tcb2->TickRemain;
         p_tcb1  = p_tcb2;
         p_tcb2  = p_tcb2->TickNextPtr;
     }
 
     if (p_tcb2 != (OS_TCB *)0) {                                /* Our entry is not the last element in the list.       */
+        /* 插入中间：后继节点剩余时间要减去当前插入节点的 delta。 */
         p_tcb1               = p_tcb2->TickPrevPtr;
         p_tcb->TickRemain    = delta;                           /* Store remaining time                                 */
         p_tcb->TickPrevPtr   = p_tcb1;
@@ -248,6 +258,7 @@ CPU_BOOLEAN  OS_TickListInsert (OS_TCB   *p_tcb,
         p_tcb1->TickNextPtr  = p_tcb;
 
     } else {                                                    /* Our entry belongs at the end of the list.            */
+        /* 插到尾部不影响其它节点 delta，仅链接尾指针。 */
         p_tcb->TickRemain    = delta;
         p_tcb->TickPrevPtr   = p_tcb1;
         p_tcb->TickNextPtr   = (OS_TCB *)0;
@@ -312,9 +323,11 @@ void  OS_TickListInsertDly (OS_TCB   *p_tcb,
 #endif
 
     if (opt == OS_OPT_TIME_MATCH) {                             /* MATCH to absolute tick ctr value mode                */
+        /* 绝对匹配模式：time 直接视为目标 tick。 */
         tick_base = 0u;                                         /* tick_base + time == time                             */
 
     } else if (opt == OS_OPT_TIME_PERIODIC) {                   /* PERIODIC mode.                                       */
+        /* 周期模式：基于上次周期基准 TickCtrPrev 计算下一次唤醒点。 */
         if (time == 0u) {
            *p_err = OS_ERR_TIME_ZERO_DLY;                       /* Infinite frequency is invalid.                       */
             return;
@@ -329,6 +342,7 @@ void  OS_TickListInsertDly (OS_TCB   *p_tcb,
 #endif
 
         if (base_offset >= time) {                              /* If our task missed the last period, move         ... */
+            /* 若任务“错过周期”，直接对齐到下一个合法周期边界。 */
             tick_base += time * (base_offset / time);           /* ... tick_base up to the next one.                    */
             if ((base_offset % time) != 0u) {
                 tick_base += time;                              /* Account for rounding errors with integer division    */
@@ -347,6 +361,7 @@ void  OS_TickListInsertDly (OS_TCB   *p_tcb,
 #endif
     }
 
+    /* 统一复用底层 delta 插入逻辑。 */
     valid_dly = OS_TickListInsert(p_tcb, elapsed, tick_base, time);
 
     if (valid_dly == OS_TRUE) {
@@ -391,6 +406,7 @@ void  OS_TickListRemove (OS_TCB  *p_tcb)
     p_tcb2 = p_tcb->TickNextPtr;
     p_list = &OSTickList;
     if (p_tcb1 == (OS_TCB *)0) {
+        /* 删除的是链表头：要么清空链表，要么把头结点移交给后继。 */
         if (p_tcb2 == (OS_TCB *)0) {                            /* Remove the ONLY entry in the list?                   */
             p_list->TCB_Ptr      = (OS_TCB *)0;
 #if (OS_CFG_DBG_EN > 0u)
@@ -406,6 +422,7 @@ void  OS_TickListRemove (OS_TCB  *p_tcb)
             OS_DynTickSet(OSTickCtrStep);
 #endif
         } else {
+            /* 头删且有后继：后继补上被删节点 delta，保持总到期时间不变。 */
             p_tcb2->TickPrevPtr  = (OS_TCB *)0;
             p_tcb2->TickRemain  += p_tcb->TickRemain;           /* Add back the ticks to the delta                      */
             p_list->TCB_Ptr      = p_tcb2;
@@ -428,6 +445,7 @@ void  OS_TickListRemove (OS_TCB  *p_tcb)
             p_tcb->TickRemain           =           0u;
         }
     } else {
+        /* 删除中间/尾部节点：前驱直连后继，后继补回被删节点 delta。 */
         p_tcb1->TickNextPtr = p_tcb2;
         if (p_tcb2 != (OS_TCB *)0) {
             p_tcb2->TickPrevPtr  = p_tcb1;
@@ -476,6 +494,7 @@ static  void  OS_TickListUpdate (OS_TICK  ticks)
     p_list      = &OSTickList;
     p_tcb       = p_list->TCB_Ptr;
     if (p_tcb != (OS_TCB *)0) {
+        /* 先消费链表头 delta；若归零表示至少一个任务到期。 */
         if (p_tcb->TickRemain <= ticks) {
             ticks              = ticks - p_tcb->TickRemain;
             p_tcb->TickRemain  = 0u;
@@ -484,21 +503,25 @@ static  void  OS_TickListUpdate (OS_TICK  ticks)
         }
 
         while (p_tcb->TickRemain == 0u) {
+            /* 循环处理“同一拍到期”的多个节点。 */
 #if (OS_CFG_DBG_EN > 0u)
             nbr_updated++;
 #endif
 
             switch (p_tcb->TaskState) {
                 case OS_TASK_STATE_DLY:
+                     /* 纯延时结束：直接转就绪并入就绪链。 */
                      p_tcb->TaskState = OS_TASK_STATE_RDY;
                      OS_RdyListInsert(p_tcb);                            /* Insert the task in the ready list                    */
                      break;
 
                 case OS_TASK_STATE_DLY_SUSPENDED:
+                     /* 延时结束但仍被挂起：退化为 SUSPENDED，暂不就绪。 */
                      p_tcb->TaskState = OS_TASK_STATE_SUSPENDED;
                      break;
 
                 default:
+                     /* 其余情况属于“带超时等待”到期路径。 */
 #if (OS_CFG_MUTEX_EN > 0u)
                      p_tcb_owner = (OS_TCB *)0;
                      if (p_tcb->PendOn == OS_TASK_PEND_ON_MUTEX) {
@@ -517,17 +540,20 @@ static  void  OS_TickListUpdate (OS_TICK  ticks)
 
                      switch (p_tcb->TaskState) {
                          case OS_TASK_STATE_PEND_TIMEOUT:
+                              /* 等待超时后恢复可运行。 */
                               OS_RdyListInsert(p_tcb);                   /* Insert the task in the ready list                    */
                               p_tcb->TaskState  = OS_TASK_STATE_RDY;
                               break;
 
                          case OS_TASK_STATE_PEND_TIMEOUT_SUSPENDED:
+                              /* 超时但仍挂起：保留挂起态。 */
                               p_tcb->TaskState  = OS_TASK_STATE_SUSPENDED;
                               break;
 
                          default:
                               break;
                      }
+                     /* 标记本次唤醒原因为 TIMEOUT，供上层 Pend API 返回。 */
                      p_tcb->PendStatus = OS_STATUS_PEND_TIMEOUT;         /* Indicate pend timed out                              */
                      p_tcb->PendOn     = OS_TASK_PEND_ON_NOTHING;        /* Indicate no longer pending                           */
 
@@ -547,6 +573,7 @@ static  void  OS_TickListUpdate (OS_TICK  ticks)
                      break;
             }
 
+            /* 从头部弹出当前到期节点，继续检查下一个节点。 */
             p_list->TCB_Ptr = p_tcb->TickNextPtr;
             p_tcb           = p_list->TCB_Ptr;                           /* Get 'p_tcb' again for loop                           */
             if (p_tcb == (OS_TCB *)0) {

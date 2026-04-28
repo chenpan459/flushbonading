@@ -78,6 +78,8 @@ void  OSTimeDly (OS_TICK   dly,
                  OS_OPT    opt,
                  OS_ERR   *p_err)
 {
+    /* 基础延时 API：
+     * 按 opt 解释 dly（相对/绝对/周期），将当前任务挂入 tick 延时链并触发调度。 */
 #if (OS_CFG_TICK_EN > 0u)
     CPU_SR_ALLOC();
 #endif
@@ -128,6 +130,7 @@ void  OSTimeDly (OS_TICK   dly,
 
 #if (OS_CFG_TICK_EN > 0u)
     CPU_CRITICAL_ENTER();
+    /* 延时链插入会统一处理 OS_OPT_TIME_DLY / MATCH / PERIODIC 等模式。 */
     OS_TickListInsertDly(OSTCBCurPtr,
                          dly,
                          opt,
@@ -137,6 +140,7 @@ void  OSTimeDly (OS_TICK   dly,
          return;
     }
 
+    /* 当前任务进入延时态后必须从就绪队列摘除。 */
     OS_RdyListRemove(OSTCBCurPtr);                              /* Remove current task from ready list                  */
     CPU_CRITICAL_EXIT();
     OSSched();                                                  /* Find next task to run!                               */
@@ -212,6 +216,7 @@ void  OSTimeDlyHMSM (CPU_INT16U   hours,
                      OS_OPT       opt,
                      OS_ERR      *p_err)
 {
+    /* 以时分秒毫秒表达延时，内部换算为 ticks 后复用 OSTimeDly 的核心路径。 */
 #if (OS_CFG_TICK_EN > 0u)
 #if (OS_CFG_ARG_CHK_EN > 0u)
     CPU_BOOLEAN  opt_invalid;
@@ -255,6 +260,7 @@ void  OSTimeDlyHMSM (CPU_INT16U   hours,
         return;
     }
 
+    /* 从复合 opt 中抽取“时间语义”位（DLY/TIMEOUT/MATCH/PERIODIC）。 */
     opt_time = opt & OS_OPT_TIME_MASK;                          /* Retrieve time options only.                          */
     switch (opt_time) {
         case OS_OPT_TIME_DLY:
@@ -306,14 +312,14 @@ void  OSTimeDlyHMSM (CPU_INT16U   hours,
     }
 #endif
 
-                                                                /* Compute the total number of clock ticks required..   */
-                                                                /* .. (rounded to the nearest tick)                     */
+    /* 统一换算为 tick 数，毫秒部分按最近 tick 做近似换算。 */
     tick_rate = OSCfg_TickRate_Hz;
     ticks     = ((((OS_TICK)hours * (OS_TICK)3600u) + ((OS_TICK)minutes * (OS_TICK)60u) + (OS_TICK)seconds) * tick_rate)
               + ((tick_rate * ((OS_TICK)milli + ((OS_TICK)500u / tick_rate))) / (OS_TICK)1000u);
 
 
     CPU_CRITICAL_ENTER();
+    /* 进入临界区后把任务插入 tick 延时链，再由调度器切走当前任务。 */
     OS_TickListInsertDly(OSTCBCurPtr,
                          ticks,
                          opt_time,
@@ -360,6 +366,8 @@ void  OSTimeDlyHMSM (CPU_INT16U   hours,
 void  OSTimeDlyResume (OS_TCB  *p_tcb,
                        OS_ERR  *p_err)
 {
+    /* 提前解除“纯延时”任务：
+     * 仅支持由 OSTimeDly/OSTimeDlyHMSM 造成的 DLY 状态，不处理事件等待超时。 */
     CPU_SR_ALLOC();
 
 
@@ -405,6 +413,7 @@ void  OSTimeDlyResume (OS_TCB  *p_tcb,
              break;
 
         case OS_TASK_STATE_DLY:
+             /* 纯延时任务：移出 tick 链并恢复就绪。 */
              p_tcb->TaskState = OS_TASK_STATE_RDY;
 #if (OS_CFG_TICK_EN > 0u)
              OS_TickListRemove(p_tcb);                          /* Remove task from tick list                           */
@@ -415,6 +424,7 @@ void  OSTimeDlyResume (OS_TCB  *p_tcb,
              break;
 
         case OS_TASK_STATE_DLY_SUSPENDED:
+             /* 延时+挂起复合态：解除延时后仍保持挂起。 */
              p_tcb->TaskState = OS_TASK_STATE_SUSPENDED;
 #if (OS_CFG_TICK_EN > 0u)
              OS_TickListRemove(p_tcb);                          /* Remove task from tick list                           */
@@ -453,6 +463,7 @@ void  OSTimeDlyResume (OS_TCB  *p_tcb,
 
 OS_TICK  OSTimeGet (OS_ERR  *p_err)
 {
+    /* 读取当前系统时间基准（tick 计数）。 */
     OS_TICK  ticks;
 #if (OS_CFG_TICK_EN > 0u)
     CPU_SR_ALLOC();
@@ -471,6 +482,7 @@ OS_TICK  OSTimeGet (OS_ERR  *p_err)
     CPU_CRITICAL_ENTER();
 #if (OS_CFG_DYN_TICK_EN > 0u)
     if (OSRunning == OS_STATE_OS_RUNNING) {
+        /* 动态 tick 需补上“本次中断前已流逝但未结算”的 elapsed tick。 */
         ticks = OSTickCtr + OS_DynTickGet();
     } else {
         ticks = OSTickCtr;
@@ -510,6 +522,7 @@ OS_TICK  OSTimeGet (OS_ERR  *p_err)
 void  OSTimeSet (OS_TICK   ticks,
                  OS_ERR   *p_err)
 {
+    /* 直接重置系统 tick 基准，通常用于时间同步或调试场景。 */
 #if (OS_CFG_TICK_EN > 0u)
     CPU_SR_ALLOC();
 
@@ -555,6 +568,8 @@ void  OSTimeSet (OS_TICK   ticks,
 
 void  OSTimeTick (void)
 {
+    /* 周期 tick ISR 入口：
+     * 用户钩子 -> 时间片轮转更新 -> 延时链更新。 */
     if (OSRunning != OS_STATE_OS_RUNNING) {
         return;
     }
@@ -589,6 +604,7 @@ void  OSTimeTick (void)
 #if (OS_CFG_DYN_TICK_EN > 0u)
 void  OSTimeDynTick (OS_TICK  ticks)
 {
+    /* 动态 tick ISR 入口：一次性结算 ticks 个时基增量。 */
     if (OSRunning != OS_STATE_OS_RUNNING) {
         return;
     }

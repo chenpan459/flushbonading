@@ -123,6 +123,7 @@ void  OSInit (OS_ERR  *p_err)
     OSTaskRegNextAvailID = 0u;
 #endif
 
+    /* 先初始化调度基础结构：优先级位图与就绪链表。 */
     OS_PrioInit();                                              /* Initialize the priority bitmap table                 */
 
     OS_RdyListInit();                                           /* Initialize the Ready List                            */
@@ -226,6 +227,7 @@ void  OSInit (OS_ERR  *p_err)
 #endif
 
 
+    /* 导出配置常量，确保链接阶段不会被裁剪。 */
     OSCfg_Init();
 
     OSInitialized = OS_TRUE;                                    /* Kernel is initialized                                */
@@ -339,6 +341,7 @@ void  OSIntExit (void)
 #endif
 #endif
 
+    /* 中断级重调度：仅在最外层 ISR 退出时选择下一个可运行任务。 */
     OSPrioHighRdy   = OS_PrioGetHighest();                      /* Find highest priority                                */
 #if (OS_CFG_TASK_IDLE_EN > 0u)
     OSTCBHighRdyPtr = OSRdyList[OSPrioHighRdy].HeadPtr;         /* Get highest priority task ready-to-run               */
@@ -447,6 +450,7 @@ void  OSSched (void)
     }
 
     CPU_INT_DIS();
+    /* 任务级重调度路径（区别于 OSIntExit 的中断路径）。 */
     OSPrioHighRdy   = OS_PrioGetHighest();                      /* Find the highest priority ready                      */
 #if (OS_CFG_TASK_IDLE_EN > 0u)
     OSTCBHighRdyPtr = OSRdyList[OSPrioHighRdy].HeadPtr;         /* Get highest priority task ready-to-run               */
@@ -567,6 +571,7 @@ void  OSSchedLock (OS_ERR  *p_err)
         return;
     }
 
+    /* 嵌套调度锁可在不被抢占的情况下批量更新内核关键状态。 */
     CPU_CRITICAL_ENTER();
     OSSchedLockNestingCtr++;                                    /* Increment lock nesting level                         */
 #if (OS_CFG_SCHED_LOCK_TIME_MEAS_EN > 0u)
@@ -640,6 +645,7 @@ void  OSSchedUnlock (OS_ERR  *p_err)
     OS_SchedLockTimeMeasStop();
 #endif
 
+    /* 最后一层解锁时触发一次延迟调度。 */
     CPU_CRITICAL_EXIT();                                        /* Scheduler should be re-enabled                       */
     OSSched();                                                  /* Run the scheduler                                    */
    *p_err = OS_ERR_NONE;
@@ -761,6 +767,7 @@ void  OSSchedRoundRobinYield (OS_ERR  *p_err)
         return;
     }
 
+    /* 同优先级主动让出 CPU：轮转就绪队列头。 */
     OS_RdyListMoveHeadToTail(p_rdy_list);                       /* Move current OS_TCB to the end of the list           */
     p_tcb = p_rdy_list->HeadPtr;                                /* Point to new OS_TCB at head of the list              */
     if (p_tcb->TimeQuanta == 0u) {                              /* See if we need to use the default time slice         */
@@ -837,6 +844,7 @@ void  OSStart (OS_ERR  *p_err)
     }
 
     if (OSRunning == OS_STATE_OS_STOPPED) {
+        /* 选择首个任务并将控制权交给端口层启动例程。 */
         OSPrioHighRdy   = OS_PrioGetHighest();                  /* Find the highest priority                            */
         OSPrioCur       = OSPrioHighRdy;
         OSTCBHighRdyPtr = OSRdyList[OSPrioHighRdy].HeadPtr;
@@ -1013,6 +1021,7 @@ void  OS_Pend (OS_PEND_OBJ  *p_obj,
     p_tcb->PendOn     = pending_on;                             /* Resource not available, wait until it is             */
     p_tcb->PendStatus = OS_STATUS_PEND_OK;
 
+    /* 统一阻塞入口：被信号量/互斥量/队列/事件标志等 Pend 复用。 */
     OS_TaskBlock(p_tcb,                                         /* Block the task and add it to the tick list if needed */
                  timeout);
 
@@ -1516,6 +1525,7 @@ void  OS_Post (OS_PEND_OBJ  *p_obj,
                  OS_TickListRemove(p_tcb);                      /* Remove from tick list                                */
              }
 #endif
+             /* 统一唤醒入口：当事件/消息满足等待条件时转为就绪。 */
              OS_RdyListInsert(p_tcb);                           /* Insert the task in the ready list                    */
              p_tcb->TaskState  = OS_TASK_STATE_RDY;
              p_tcb->PendStatus = OS_STATUS_PEND_OK;             /* Clear pend status                                    */
@@ -1635,6 +1645,7 @@ void  OS_RdyListInit (void)
 
 void  OS_RdyListInsert (OS_TCB  *p_tcb)
 {
+    /* 保持优先级位图与按优先级就绪链表状态一致。 */
     OS_PrioInsert(p_tcb->Prio);
     if (p_tcb->Prio == OSPrioCur) {                             /* Are we readying a task at the same prio?             */
         OS_RdyListInsertTail(p_tcb);                            /* Yes, insert readied task at the end of the list      */
@@ -1875,6 +1886,7 @@ void  OS_RdyListMoveHeadToTail (OS_RDY_LIST  *p_rdy_list)
     OS_TCB  *p_tcb3;
 
 
+     /* round-robin 使用：保障同优先级可运行任务的公平轮转。 */
      if (p_rdy_list->HeadPtr != p_rdy_list->TailPtr) {
          if (p_rdy_list->HeadPtr->NextPtr == p_rdy_list->TailPtr) { /* SWAP the TCBs                                    */
              p_tcb1              =  p_rdy_list->HeadPtr;        /* Point to current head                                */
@@ -2085,6 +2097,7 @@ void  OS_SchedRoundRobin (OS_RDY_LIST  *p_rdy_list)
     }
 #endif
 
+    /* 由 Tick 驱动当前队首任务时间片递减。 */
     if (p_tcb->TimeQuantaCtr > 0u) {
         p_tcb->TimeQuantaCtr--;
     }
@@ -2159,5 +2172,6 @@ void  OS_TaskBlock (OS_TCB   *p_tcb,
     (void)timeout;
     p_tcb->TaskState = OS_TASK_STATE_PEND;
 #endif
+    /* 最后一步：完成超时记账后将任务移出可运行集合。 */
     OS_RdyListRemove(p_tcb);
 }
